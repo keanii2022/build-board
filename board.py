@@ -16,14 +16,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.expanduser("~")
 
 # ── Settings ────────────────────────────────────────────────────────────────
-SCAN_DIRS = [os.environ.get("BOARD_SCAN") or f"{HOME}/Projects"]  # folders whose subfolders are projects
+# The widget passes SETTINGS.projectsDir / planFiles in as BOARD_SCAN / BOARD_PLANS. Run by hand, the defaults apply.
+SCAN_DIRS = [os.path.expanduser(os.environ.get("BOARD_SCAN") or "~/Projects")]  # folders whose subfolders are projects
 # Folder names never read. Put one name per line in a `.skip` file next to this
 # script (it is gitignored, so your list stays yours).
 IGNORE = set()
 if os.path.exists(f"{HERE}/.skip"):
     IGNORE = {l.strip() for l in open(f"{HERE}/.skip") if l.strip() and not l.startswith("#")}
 FRESH_DAYS = 7                        # a repo with no plan still shows if it had a commit this recently
-PLAN_FILES = ["PLAN.md", "docs/PLAN.md", "notes/PLAN.md", "NOTES.md"]   # first one that has steps wins
+PLAN_FILES = [f for f in os.environ.get("BOARD_PLANS", "").split(",") if f] or ["PLAN.md", "docs/PLAN.md", "notes/PLAN.md", "NOTES.md"]   # first one that has steps wins
 TOOLS_JSON = os.path.join(HERE, "tools.json")   # the hand-kept track with no repo
 PUSH_MARKER = os.path.join(HERE, ".last-push")  # a pre-push git hook writes the repo name here
 PET_FILE = os.path.join(HERE, ".pet.json")      # the pet's memory, written by the widget

@@ -10,7 +10,7 @@ Needs [Übersicht](https://tracesof.net/uebersicht/) and `python3`. Nothing to p
 git clone https://github.com/keanii2022/build-board.git "$HOME/Library/Application Support/Übersicht/widgets/build-board"
 ```
 
-Your projects are the folders under `~/Projects` (`BOARD_SCAN=/other/folder` to change). Give each one a `PLAN.md` with steps and the bar fills in:
+Your projects are the folders under `~/Projects` (`projectsDir` in `SETTINGS`). Give each one a `PLAN.md` with steps and the bar fills in (`planFiles` in `SETTINGS` if you call it something else):
 
 ```md
 - [x] **Step 1: Skeleton**

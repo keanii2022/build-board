@@ -24,6 +24,9 @@ const SETTINGS = {
                                // corner grip (both). Double-click the grip to reset. Remembered like the position.
   scale: 1,                    // text size. Hold ⌥ and scroll over the widget to change it.
   draggable: true,             // grab the header and drop it anywhere. It remembers the spot
+  projectsDir: "~/Projects",   // every folder in here is a project (with or without a plan or commits)
+  planFiles: ["PLAN.md", "docs/PLAN.md", "notes/PLAN.md", "NOTES.md"],   // where a project's steps live; the first file with steps wins
+  rowTint: 0.14,               // each row wears a faint wash of its icon's colour, so no two rows read the same. 0 = plain glass
   icons: {},                   // a pixel icon per project, e.g. { "approval-desk": "rocket" }. Names: rocket cube flask bolt heart star leaf gem planet ghost key book. Unset = picked for you
   screen: "biggest",           // with more than one display: "biggest" (the monitor when it's plugged in, the laptop when not),
                                // "main" (the one with the menu bar in System Settings), "all" (a copy on every display).
@@ -135,7 +138,7 @@ const SETTINGS = {
 // ════════════════════════════════════════════════════════════════════════════
 
 const WIDGET_DIR = '"$HOME/Library/Application Support/Übersicht/widgets/build-board"';
-export const command = `cd ${WIDGET_DIR} 2>/dev/null || cd build-board; /usr/bin/env python3 board.py`;
+export const command = `cd ${WIDGET_DIR} 2>/dev/null || cd build-board; BOARD_SCAN=${sh(S.projectsDir)} BOARD_PLANS=${sh((S.planFiles || []).join(","))} /usr/bin/env python3 board.py`;
 export const refreshFrequency = SETTINGS.refreshSeconds * 1000;
 
 const pos = SETTINGS.position;
@@ -346,6 +349,12 @@ function assignIcons(ids) {   // every project its own icon: hash picks a start,
 function iconOf(id) {
   const name = (memory.iconMap && memory.iconMap[id]) || (S.icons[id] && ICONS[S.icons[id]] ? S.icons[id] : ICON_NAMES[hashOf(id) % ICON_NAMES.length]);
   return ICONS[name];
+}
+function tintOf(id) {   // the row's colour: the icon's main colour (not its outline or white), else a spectrum colour by name
+  const count = {};
+  for (const row of iconOf(id)) for (const ch of row) if (!".kxyYw".includes(ch)) count[ch] = (count[ch] || 0) + 1;
+  const top = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+  return (top && PAL[top]) || S.spectrum[hashOf(id) % S.spectrum.length];
 }
 const CHEST_CLOSED = ["..kkkkkkkkkkkk..", ".kNNNNNNNNNNNNk.", "kNnnnnnnnnnnnnNk", "kNnnnnnnnnnnnnNk", "kggggggggggggggk", "kNnnnnngGgnnnnNk",
                       "kNnnnnngggnnnnNk", "kNnnnnnnnnnnnnNk", "kNnnnnnnnnnnnnNk", "kNNNNNNNNNNNNNNk", ".kkkkkkkkkkkkkk."];
@@ -625,6 +634,10 @@ function styles(busy) {
     .bb-rule { height: 1px; background: ${SPECTRUM}; opacity: 0.7; margin: 0 0 12px; }
     .bb-list { display: grid; gap: 13px; }
     .bb-proj { display: grid; gap: 5px; cursor: ${S.clickOpens ? "pointer" : "default"}; border-radius: 8px; }
+    ${S.rowTint > 0 ? `.bb-proj { padding: 7px 10px; margin: 0 -10px;
+      background: linear-gradient(90deg, color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 100)}%, transparent), color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 35)}%, transparent) 55%, transparent);
+      box-shadow: inset 2px 0 0 color-mix(in srgb, var(--tint) 65%, transparent); }
+    .bb-proj:hover { background: linear-gradient(90deg, color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 160)}%, transparent), color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 50)}%, transparent) 55%, transparent); }` : ""}
     .bb-proj.arrived { animation: bb-arrive 1.2s cubic-bezier(.2,.8,.2,1) both; }
     .bb-new { font-size: 8px; font-weight: 700; letter-spacing: 0.14em; padding: 2px 6px; border-radius: 999px;
       background: ${SPECTRUM}; color: #fff; margin-right: 6px; }
@@ -1217,8 +1230,9 @@ function petTick(data, all, now) {   // once per refresh: credit new steps, drop
     earn(pet, credit * (S.cute.coins.step || 0), `+${credit * (S.cute.coins.step || 0)} coins`);
   }
   // coins for commits: data.today is every commit today across the repos; pay for the ones not paid yet
-  const seen = pet.commitsSeen && pet.commitsSeen.day === today ? pet.commitsSeen.n : 0;
   const tc = data.today || 0;
+  // seen never beats today's real count: a squash or amend lowers the count, and the next commit must still pay
+  const seen = Math.min(tc, pet.commitsSeen && pet.commitsSeen.day === today ? pet.commitsSeen.n : 0);
   if (tc > seen) earn(pet, (tc - seen) * (S.cute.coins.commit || 0), `+${(tc - seen) * (S.cute.coins.commit || 0)} coins for committing`);
   pet.commitsSeen = { day: today, n: Math.max(seen, tc) };
   if (pet.steps >= S.cute.hatchAt && S.cute.diesAfterDays && idleDays(pet, now) >= S.cute.diesAfterDays) petDies(pet, all, now);
@@ -1428,7 +1442,7 @@ function Project({ data, now, lastPush, index }) {
     right = <span>{data.commitsWeek ? `${data.commitsWeek} this week · ` : ""}{ago(data.commitAt, now)}</span>;
 
   return (
-    <div className={cls} style={{ "--w": `${pct}%`, "--f": Math.max(frac, 0.02), "--i": index }}
+    <div className={cls} style={{ "--w": `${pct}%`, "--f": Math.max(frac, 0.02), "--i": index, "--tint": tintOf(cfg.id) }}
          onClick={() => { if (Date.now() - memory.dragEndAt > 300) openPath(cfg.path); }} onMouseEnter={enterProj} onMouseLeave={scheduleHide} data-i={index} data-id={cfg.id} title={cfg.path ? `open ${cfg.path}` : ""}>
       <div className="bb-row">
         <span className="bb-dot" />
