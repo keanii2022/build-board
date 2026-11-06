@@ -1,30 +1,54 @@
 # Build Board
 
-A dark glass desktop widget for macOS (Übersicht) that turns your projects' `PLAN.md` files into a live board. One bar per project, commits and streak on top, a pixel pet that eats the steps you tick off and dies if you stop. A hand-written MCP server lets Claude Code read and tick the same board.
+**Your projects' PLAN.md files, as a live progress board on your Mac desktop. With a pixel pet that eats the steps you tick, and an MCP server so Claude Code reads the same board.**
+
+![Build Board on a desktop: one bar per project, commits and streak on top, the pet in the corner](demo.gif)
+
+## Why
+
+If you build with Claude Code, you already have PLAN.md files with ticked and unticked steps. Build Board reads them every 30 seconds and draws one bar per project, with today's commits, your streak, and what's next. Glance at the desktop instead of asking Claude "where was I" at the start of every chat. That's tokens you keep.
+
+The pet is the nudge. Tick steps and commit to feed it. Stop for a while and it gets hungry. Push and it throws a party.
 
 ## Install
 
-Needs [Übersicht](https://tracesof.net/uebersicht/) and `python3`. Nothing to pip install.
+Needs [Übersicht](https://tracesof.net/uebersicht/) (free, draws widgets on the macOS desktop) and `python3`. Nothing to pip install.
 
 ```bash
 git clone https://github.com/keanii2022/build-board.git "$HOME/Library/Application Support/Übersicht/widgets/build-board"
 ```
 
-Your projects are the folders under `~/Projects` (`projectsDir` in `SETTINGS`). Give each one a `PLAN.md` with steps and the bar fills in (`planFiles` in `SETTINGS` if you call it something else):
+Open Übersicht once if it's not running and the board appears.
+
+### Hook it up to Claude Code (optional, one time)
+
+```bash
+claude mcp add -s user build-board -- python3 "$HOME/Library/Application Support/Übersicht/widgets/build-board/server.py"
+```
+
+Now any chat can say "what's on my board" or "tick step 3 in my-app".
+
+## Your projects
+
+The board looks at the folders under `~/Projects` (`projectsDir` in `SETTINGS`). Give each one a `PLAN.md` with steps:
 
 ```md
 - [x] **Step 1: Skeleton**
 - [ ] **Step 2: Agent**
 ```
 
-**No PLAN.md yet?** The project still shows, with a NO PLAN pill, and its commits still count toward the streak and the pet. The bar only moves once there are steps to tick, so write the plan first: a few `- [ ] **Step N: name**` lines is enough. `## N. Name` headings with a `**Status:** done` line work too. Anything under `## Later` is ignored. A `.skip` file next to `board.py` (one folder name per line) keeps a folder off the board.
+Tick a box, the bar moves. `## N. Name` headings with a `**Status:** done` line work too, and anything under `## Later` is ignored. Other filenames: `planFiles` in `SETTINGS`.
+
+**No PLAN.md yet?** The project still shows with a NO PLAN pill, and its commits still count toward the streak and the pet. Easiest fix: open Claude Code in that folder and say "write me a PLAN.md with the steps for this".
+
+A `.skip` file next to `board.py` (one folder name per line) keeps a folder off the board. A track with no repo (a course, a reading list): copy `tools.example.json` to `tools.json` and it sits under a TRACK line at the bottom.
 
 ## Use it
 
-- Hover a project's pill to see its steps. Click a project to open a Claude Code session in it.
+- Hover a project's steps pill (`7 / 16`) to see its steps. Click a project to open a Claude Code session in it.
+- Hover a sparkline for each day's commit count.
 - Drag a project's icon onto the chest to store it. Drag it back up to put it on the board.
 - Tick steps and commit to feed the pet and earn coins. Spend them in the chest's shop. Push to throw a party.
-- Every knob (colours, size, sounds, pet rules) is in `SETTINGS` at the top of `index.jsx`, with a comment each. Save and it redraws.
 
 ## Push party
 
@@ -34,20 +58,24 @@ Optional git hook that tells the widget you pushed. Per repo:
 cp "$HOME/Library/Application Support/Übersicht/widgets/build-board/pre-push.hook" ~/Projects/my-repo/.git/hooks/pre-push && chmod +x ~/Projects/my-repo/.git/hooks/pre-push
 ```
 
+## Make it yours
+
+Every knob (colours, size, sounds, pet rules) is in `SETTINGS` at the top of `index.jsx`, with a comment each. Save and it redraws.
+
+For anything bigger, open Claude Code in the widget folder and tell it what you want: a different pet, no pet, your colours, a new shop item, a second track. It's one JSX file and two small Python files, so Claude can read the whole thing.
+
 ## MCP server
 
-`server.py` speaks MCP over stdio by hand (JSON-RPC, no packages) and gives Claude Code four tools: `board`, `steps`, `tick`, `pet`. Register once:
+`server.py` speaks MCP over stdio by hand (JSON-RPC, no packages) and gives Claude Code four tools: `board`, `steps`, `tick`, `pet`.
+
+Try it without Claude:
 
 ```bash
-claude mcp add -s user build-board -- python3 "$HOME/Library/Application Support/Übersicht/widgets/build-board/server.py"
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python3 server.py
 ```
-
-Try it without Claude: `echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python3 server.py`
 
 ## Files
 
 `index.jsx` the widget · `sprites.jsx` pixel art and shop · `board.py` reads the plans, prints JSON · `server.py` MCP · `pre-push.hook`
-
-A track with no repo (a course, a reading list): copy `tools.example.json` to `tools.json` and it sits under a TRACK line at the bottom.
 
 MIT.
