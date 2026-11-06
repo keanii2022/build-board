@@ -4,3 +4,6 @@
 .skip
 __pycache__/
 .DS_Store
+
+# your own hand-kept track (copy tools.example.json to start one)
+tools.json

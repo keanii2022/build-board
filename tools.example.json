@@ -1,0 +1,9 @@
+{
+  "_how": "Copy this file to tools.json for a hand-kept track that has no repo. Flip a step's status to done / current / pending (or tick it in the widget's card) and the board picks it up on its next refresh.",
+  "name": "Learning track",
+  "steps": [
+    { "n": 1, "name": "First thing", "status": "done" },
+    { "n": 2, "name": "Second thing", "status": "current" },
+    { "n": 3, "name": "Third thing", "status": "pending" }
+  ]
+}

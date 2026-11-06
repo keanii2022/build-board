@@ -143,6 +143,8 @@ def scan():
 
 
 def tools_track():
+    if not os.path.exists(TOOLS_JSON):   # no hand-kept track on this machine: the board just has no TRACK line
+        return None
     try:
         data = json.loads(read(TOOLS_JSON))
         steps = []
@@ -193,7 +195,7 @@ def streak(dates):
 
 
 def main():
-    projects = scan() + [tools_track()]
+    projects = scan() + [t for t in [tools_track()] if t]
     projects.sort(key=lambda p: p.get("activityAt", 0), reverse=True)
     result = {"generatedAt": int(time.time()), "projects": projects}
     result["screens"] = screens()

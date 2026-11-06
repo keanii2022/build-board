@@ -46,6 +46,8 @@ Try it without Claude: `echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | 
 
 ## Files
 
-`index.jsx` the widget · `sprites.jsx` pixel art and shop · `board.py` reads the plans, prints JSON · `server.py` MCP · `tools.json` a hand-kept track with no repo · `pre-push.hook`
+`index.jsx` the widget · `sprites.jsx` pixel art and shop · `board.py` reads the plans, prints JSON · `server.py` MCP · `pre-push.hook`
+
+A track with no repo (a course, a reading list): copy `tools.example.json` to `tools.json` and it sits under a TRACK line at the bottom.
 
 MIT.
