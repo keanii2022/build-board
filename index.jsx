@@ -112,6 +112,7 @@ const SETTINGS = {
   hoverSteps: true,            // hover a project to see its full step list
   stepsStyle: "flyout",        // "flyout": a card beside the widget, sized to fit the screen, scrolls, lands on the current step.
   flyInside: true,             // on a wide widget the card opens inside the panel (right edge) instead of beside it, so windows can't cover it
+  chestStyle: "overlay",       // "overlay" = the chest opens over the board itself, full width under the header. "beside" = a card next to the widget
                                // "dropdown": opens under the project (can run off the bottom of the screen).
 
   // ── Clicks ────────────────────────────────────────────────────────────────
@@ -699,6 +700,8 @@ function styles(busy) {
     .bb-fly.right { left: 100%; padding-left: 14px; transform: translateX(-6px); }
     .bb-fly.left { right: 100%; padding-right: 14px; transform: translateX(6px); }
     .bb-fly.in { left: auto; right: 0; padding: 0; transform: translateY(-4px); }
+    .bb-fly.over { left: 10px; right: 10px; width: auto !important; padding: 0; transform: translateY(6px); }
+    .bb-fly.over .bb-fly-card { width: auto; }
     .bb-fly.show { visibility: visible; opacity: 1; transform: none; pointer-events: auto; }
     .bb-fly-card { background: ${S.panel}; border-radius: ${S.radius - 4}px; padding: 12px 14px;
       -webkit-backdrop-filter: blur(${S.glass}px) saturate(1.3); backdrop-filter: blur(${S.glass}px) saturate(1.3);
@@ -1577,7 +1580,16 @@ function ChestCard({ stored, hidden, pet, view }) {   // the window the chest op
 function placeChest() {   // after every draw: the card sits beside the chest (or inside a wide widget), scrolls on its own
   const bb = document.querySelector(".bb"), fly = bb && bb.querySelector(".bb-chestcard"), btn = bb && bb.querySelector(".bb-chestbtn");
   if (!fly || !btn) return;
-  if (layout().open) placeFly(fly, bb, btn, fly.querySelector(".bb-chest-body")); else fly.classList.remove("show");
+  const body = fly.querySelector(".bb-chest-body");
+  if (!layout().open) { fly.classList.remove("show"); return; }
+  if (S.chestStyle === "beside") { placeFly(fly, bb, btn, body); return; }
+  // Overlay: the card lies over the board, under the header, as wide as the panel, and never past its bottom.
+  const z = loadScale(), br = bb.getBoundingClientRect(), grab = bb.querySelector(".bb-grab");
+  const top = grab ? (grab.getBoundingClientRect().bottom - br.top) / z + 6 : 16;
+  fly.classList.remove("in", "left", "right"); fly.classList.add("over", "show");
+  fly.style.marginLeft = ""; fly.style.marginRight = ""; fly.style.top = Math.round(top) + "px";
+  const head = fly.querySelector(".bb-fly-head"), headH = head ? head.getBoundingClientRect().height / z : 36;
+  if (body) body.style.maxHeight = Math.max(80, br.height / z - top - headH - 40) + "px";
 }
 
 function Title() {
