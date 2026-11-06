@@ -704,7 +704,7 @@ function styles(busy) {
     .bb-fly.left { right: 100%; padding-right: 14px; transform: translateX(6px); }
     .bb-fly.in { left: auto; right: 0; padding: 0; transform: translateY(-4px); }
     .bb-fly.over { left: 10px; right: 10px; width: auto !important; padding: 0; transform: translateY(6px); }
-    .bb-fly.over .bb-fly-card { width: auto; }
+    .bb-fly.over .bb-fly-card { width: auto; background: ${S.panel.replace(/[\d.]+\)\s*$/, "0.92)")}; }   // more opaque than the panel so the rows don't bleed through
     .bb-fly.show { visibility: visible; opacity: 1; transform: none; pointer-events: auto; }
     .bb-fly-card { background: ${S.panel}; border-radius: ${S.radius - 4}px; padding: 12px 14px;
       -webkit-backdrop-filter: blur(${S.glass}px) saturate(1.3); backdrop-filter: blur(${S.glass}px) saturate(1.3);
