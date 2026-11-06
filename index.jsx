@@ -473,9 +473,15 @@ function applySize(bb) {
   const z = loadScale(), w = loadWidth(), h = loadHeight();
   bb.style.zoom = z;
   bb.style.height = h ? h + "px" : "";
-  bb.classList.toggle("bb-fixed", !!h);
+  // Never taller than the screen it's on: a board that fit the monitor must still fit the laptop.
+  // The list scrolls inside instead of running off the bottom (same as a fixed height).
   const wrap = wrapperOf(bb);
+  const top = wrap ? Math.max(0, wrap.getBoundingClientRect().top) : 0;
+  const cap = Math.floor((window.innerHeight - top - 16) / z);
+  bb.style.maxHeight = cap > 100 ? cap + "px" : "";
+  bb.classList.add("bb-fixed");
   if (wrap) wrap.style.width = Math.round(w * z) + "px";
+  if (!memory.sizeListener) { memory.sizeListener = true; window.addEventListener("resize", () => applySize(document.querySelector(".bb"))); }
 }
 function mountPos(el) {
   if (!el || memory.dragging) return;
@@ -1629,7 +1635,7 @@ function renderBoard({ output, error }) {
   const party = S.cute.pushParty && memory.partyAt && Date.now() - memory.partyAt < 4000;   // just pushed: the whole panel celebrates
 
   return (
-    <div className={"bb" + (view && view.friend ? " bb-floor" : "") + (party ? " bb-party" : "") + (loadHeight() ? " bb-fixed" : "") + (view && view.trick ? " bb-trick-" + view.trick : "") + (memory.deathAt && Date.now() - memory.deathAt < 60000 ? " bb-mourn" : "")} ref={mountPos} onMouseMove={followEyes} onMouseLeave={restEyes} onWheel={wheelScale} onClick={closeChest}>
+    <div className={"bb" + (view && view.friend ? " bb-floor" : "") + (party ? " bb-party" : "") + " bb-fixed" + (view && view.trick ? " bb-trick-" + view.trick : "") + (memory.deathAt && Date.now() - memory.deathAt < 60000 ? " bb-mourn" : "")} ref={mountPos} onMouseMove={followEyes} onMouseLeave={restEyes} onWheel={wheelScale} onClick={closeChest}>
       {party ? <Confetti key={memory.partyAt} /> : null}
       <style>{styles(today > 0)}</style>
       <Bubbles />
