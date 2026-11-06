@@ -138,7 +138,7 @@ const SETTINGS = {
 // ════════════════════════════════════════════════════════════════════════════
 
 const WIDGET_DIR = '"$HOME/Library/Application Support/Übersicht/widgets/build-board"';
-export const command = `cd ${WIDGET_DIR} 2>/dev/null || cd build-board; BOARD_SCAN=${sh(S.projectsDir)} BOARD_PLANS=${sh((S.planFiles || []).join(","))} /usr/bin/env python3 board.py`;
+export const command = `cd ${WIDGET_DIR} 2>/dev/null || cd build-board; BOARD_SCAN=${sh(SETTINGS.projectsDir)} BOARD_PLANS=${sh((SETTINGS.planFiles || []).join(","))} /usr/bin/env python3 board.py`;
 export const refreshFrequency = SETTINGS.refreshSeconds * 1000;
 
 const pos = SETTINGS.position;
