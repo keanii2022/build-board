@@ -138,8 +138,11 @@ const SETTINGS = {
 //  Engine. You shouldn't need to touch anything below this line.
 // ════════════════════════════════════════════════════════════════════════════
 
-const WIDGET_DIR = '"$HOME/Library/Application Support/Übersicht/widgets/build-board"';
-export const command = `cd ${WIDGET_DIR} 2>/dev/null || cd build-board; BOARD_SCAN=${sh(SETTINGS.projectsDir)} BOARD_PLANS=${sh((SETTINGS.planFiles || []).join(","))} /usr/bin/env python3 board.py`;
+// Where this widget lives. A git clone is "build-board", a gallery install is "build-board.widget":
+// FIND_DIR is a shell snippet that sets $W to whichever one exists. Every shell command starts with it.
+const FIND_DIR = `D="$HOME/Library/Application Support/Übersicht/widgets"; W="$D/build-board.widget"; [ -d "$W" ] || W="$D/build-board"`;
+const WIDGET_DIR = '"$W"';
+export const command = `${FIND_DIR}; cd ${WIDGET_DIR} 2>/dev/null || cd build-board.widget 2>/dev/null || cd build-board; BOARD_SCAN=${sh(SETTINGS.projectsDir)} BOARD_PLANS=${sh((SETTINGS.planFiles || []).join(","))} /usr/bin/env python3 board.py`;
 export const refreshFrequency = SETTINGS.refreshSeconds * 1000;
 
 const pos = SETTINGS.position;
@@ -1153,7 +1156,7 @@ function savePet() {
   const json = JSON.stringify(memory.pet);
   if (json === memory.petSaved) return;
   memory.petSaved = json;
-  run(`printf '%s' ${sh(json)} > ${PET_FILE}`);
+  run(`${FIND_DIR}; printf '%s' ${sh(json)} > ${PET_FILE}`);
 }
 function say(line, ms) {
   const el = document.querySelector(".bb-say");

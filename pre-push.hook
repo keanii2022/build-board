@@ -4,6 +4,8 @@
 # All it does is stamp a marker file with the repo's folder name so the desktop
 # widget shows "pushed just now". It never blocks a push.
 
-MARKER="$HOME/Library/Application Support/Übersicht/widgets/build-board/.last-push"
+D="$HOME/Library/Application Support/Übersicht/widgets"
+W="$D/build-board.widget"; [ -d "$W" ] || W="$D/build-board"   # git clone or gallery install
+MARKER="$W/.last-push"
 basename "$(git rev-parse --show-toplevel 2>/dev/null)" > "$MARKER" 2>/dev/null
 exit 0
