@@ -17,7 +17,7 @@ Your projects are the folders under `~/Projects` (`BOARD_SCAN=/other/folder` to 
 - [ ] **Step 2: Agent**
 ```
 
-`## N. Name` headings with a `**Status:** done` line work too. Anything under `## Later` is ignored. A `.skip` file next to `board.py` (one folder name per line) keeps a folder off the board.
+**No PLAN.md yet?** The project still shows, with a NO PLAN pill, and its commits still count toward the streak and the pet. The bar only moves once there are steps to tick, so write the plan first: a few `- [ ] **Step N: name**` lines is enough. `## N. Name` headings with a `**Status:** done` line work too. Anything under `## Later` is ignored. A `.skip` file next to `board.py` (one folder name per line) keeps a folder off the board.
 
 ## Use it
 
