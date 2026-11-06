@@ -1,0 +1,6 @@
+# per-machine state the widget writes
+.pet.json
+.last-push
+.skip
+__pycache__/
+.DS_Store

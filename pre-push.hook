@@ -1,0 +1,9 @@
+#!/bin/sh
+# Build Board pre-push hook.
+# Copy this file to <repo>/.git/hooks/pre-push (and chmod +x it).
+# All it does is stamp a marker file with the repo's folder name so the desktop
+# widget shows "pushed just now". It never blocks a push.
+
+MARKER="$HOME/Library/Application Support/Übersicht/widgets/build-board/.last-push"
+basename "$(git rev-parse --show-toplevel 2>/dev/null)" > "$MARKER" 2>/dev/null
+exit 0

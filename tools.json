@@ -1,0 +1,35 @@
+{
+  "_how": "Hand-kept list for the AI Engineer Tools track (it has no repo). Flip a step's status to done / current / pending and the widget picks it up on its next refresh.",
+  "steps": [
+    {
+      "n": 1,
+      "name": "Health check and verification",
+      "status": "done"
+    },
+    {
+      "n": 2,
+      "name": "CLAUDE.md v2, permissions, hooks",
+      "status": "done"
+    },
+    {
+      "n": 3,
+      "name": "Write an MCP server by hand: build-board server",
+      "status": "done"
+    },
+    {
+      "n": 4,
+      "name": "RAG by hand over your docs and memory",
+      "status": "current"
+    },
+    {
+      "n": 5,
+      "name": "Retrieval as an MCP tool, re-scored",
+      "status": "pending"
+    },
+    {
+      "n": 6,
+      "name": "Portfolio: READMEs, profile page, LEARNED log",
+      "status": "pending"
+    }
+  ]
+}
