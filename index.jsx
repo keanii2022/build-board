@@ -801,7 +801,7 @@ function styles(busy) {
     .bb-bubbles { position: absolute; inset: 0; overflow: hidden; border-radius: ${S.radius}px; pointer-events: none; z-index: 0; }
     .bb > .bb-grab, .bb > .bb-body { position: relative; z-index: 1; }
     .bb-grip, .bb-edge, .bb-edge-b { z-index: 2; }
-    .bb-mute { position: absolute; right: 22px; bottom: 9px; z-index: 3; cursor: pointer; line-height: 0; opacity: 0.45;
+    .bb-mute { position: absolute; left: 18px; bottom: 10px; z-index: 3; cursor: pointer; line-height: 0; opacity: 0.45;   /* bottom left, out of the chest's way */
       transition: opacity .2s, transform .2s cubic-bezier(.3,1.5,.4,1); }
     .bb-mute:hover { opacity: 1; transform: scale(1.2); }
     .bb-mute .px { display: none; }
