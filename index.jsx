@@ -271,12 +271,17 @@ function LockPad() {
     if (e.key === "Enter") { pinSubmit(e.currentTarget.value); e.currentTarget.value = ""; }
     else if (e.key === "Escape") pinCancel();
   };
+  const onInput = (e) => {   // when it's the right one, it just opens: no enter, no attempt counted
+    const v = e.currentTarget.value, el = e.currentTarget;
+    if (P.mode !== "enter" || v.length < 4) return;
+    pinHash(v).then((h) => { if (memory.pin === P && el.value === v && h === pinStored()) { el.value = ""; pinDone(); } });
+  };
   return (
     <div className={"bb-lock" + (P.err ? " err" : "")} onClick={(e) => { e.stopPropagation(); const i = e.currentTarget.querySelector("input"); if (i) i.focus(); }}
          onMouseDown={(e) => e.stopPropagation()} onMouseMove={(e) => e.stopPropagation()}>
       <div className="bb-lock-card">
         <div className="t">{title}</div>
-        <input className="bb-lock-in" type="password" placeholder="password" autoComplete="off" spellCheck={false} ref={focusLock} onKeyDown={onKey} onMouseDown={(e) => e.stopPropagation()} />
+        <input className="bb-lock-in" type="password" placeholder="password" autoComplete="off" spellCheck={false} ref={focusLock} onKeyDown={onKey} onInput={onInput} onMouseDown={(e) => e.stopPropagation()} />
         <div className="row">
           <span className="go" onClick={(e) => { const i = e.currentTarget.closest(".bb-lock-card").querySelector("input"); pinSubmit(i.value); i.value = ""; }}>enter</span>
           {P.cancellable ? <span className="go dim" onClick={pinCancel}>cancel</span> : null}
