@@ -154,12 +154,14 @@ export function drawPet(o) {
   const stage = o.stage || 0, face = o.face || "fed", wear = o.wear || [];
   const rx = [6, 7.5, 9.5, 11.5, 12][stage], ry = [5, 5.5, 6.5, 7.5, 7.5][stage];
   const scooter = stage === 4, ghost = face === "ghost";
-  // Under the head: a torso (odd width), an arm a column off each side, two legs, shoes. A ghost is just the head.
-  const tw = ghost ? 0 : (Math.round(rx * 1.1) | 1), th = ghost ? 0 : 5 + stage, ll = ghost ? 0 : 3 + (stage >= 2 ? 1 : 0);
-  const W = Math.ceil(rx * 2) + (scooter ? 10 : 4) + 4;
-  const cx = Math.floor((Math.ceil(rx * 2) + 4 - 1) / 2) + 2 + (scooter ? 1 : 0), cy = 6 + ry;
+  // Under the head: a round chubby body tucked behind the chin, a stubby arm each side, two little feet. A ghost is just the head.
+  const ex = ghost ? 0 : 3;   // extra room each side for the arms
+  const brx = rx + 1, bry = Math.round(ry * 0.85);
+  const W = Math.ceil(rx * 2) + (scooter ? 10 : 4) + 4 + ex * 2;
+  const cx = Math.floor((Math.ceil(rx * 2) + 4 - 1) / 2) + 2 + (scooter ? 1 : 0) + ex, cy = 6 + ry;
   const base = Math.round(cy + ry);   // the head's last row
-  const H = ghost ? Math.ceil(ry * 2) + 9 : base + th + ll + 3 + (scooter ? 4 : 0);
+  const bcy = base - 2 + bry, bodyBot = Math.round(bcy + bry), feetY = bodyBot;   // the feet poke out of the body's last row
+  const H = ghost ? Math.ceil(ry * 2) + 9 : feetY + 3 + (scooter ? 4 : 0);
   const g = blank(W, H), pu = blank(W, H);
   const inside = (x, y, k = 0) => ((x - cx) / (rx - k)) ** 2 + ((y - cy) / (ry - k)) ** 2 <= 1;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (inside(x, y)) g[y][x] = inside(x, y, 1) ? "s" : "d";
@@ -189,40 +191,40 @@ export function drawPet(o) {
   if (stage >= 3) { const by = Math.round(cy + ry * 0.15); for (let x = Math.round(cx - rx * 0.25); x <= Math.round(cx + rx * 0.25); x++) if (g[by][x] === "s") g[by][x] = "d"; }
   // the body. hand = [row, col] of each hand, wrist = the pixels a watch sits on (right arm)
   const arms = o.arms || {};
-  const half = (tw - 1) / 2, torsoTop = base + 1, torsoBot = base + th, feetY = torsoBot + ll + 1;
   const hand = { L: null, R: null }, wrist = [];
+  const bx = (y) => Math.round(brx * Math.sqrt(Math.max(0, 1 - ((y - bcy) / bry) ** 2)));   // the body's half-width on a row
+  const ay = bcy;   // arm row
   if (!ghost) {
-    for (let y = torsoTop; y <= torsoBot; y++) for (let x = cx - half; x <= cx + half; x++)
-      g[y][x] = (y === torsoBot || x === cx - half || x === cx + half) ? "d" : "s";
+    const inBody = (x, y, k = 0) => ((x - cx) / (brx - k)) ** 2 + ((y - bcy) / (bry - k)) ** 2 <= 1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((g[y][x] === "." || y >= base) && inBody(x, y)) g[y][x] = inBody(x, y, 1) ? "s" : "d";   // from the chin down the body wins
     for (const side of ["L", "R"]) {
-      const out = side === "L" ? -1 : 1, X = cx + out * (half + 2);   // one empty column between torso and arm
-      put(g, torsoTop, X - out, "d");   // shoulder
-      if (arms[side === "L" ? "left" : "right"]) {   // out to the side, hand at the end
-        const sy = torsoTop + 1;
-        for (let i = 0; i < 3; i++) put(g, sy, X + out * i, "d");
-        put(g, sy, X + out * 3, "s"); put(g, sy - 1, X + out * 3, "s");
-        hand[side] = [sy, X + out * 3];
-        if (side === "R") wrist.push([sy, X + 2], [sy - 1, X + 2]);
-      } else {
-        for (let y = torsoTop; y < torsoBot; y++) put(g, y, X, "d");
-        put(g, torsoBot, X, "s");
-        hand[side] = [torsoBot, X];
-        if (side === "R") wrist.push([torsoBot - 1, X], [torsoBot - 1, X + 1]);
+      const out = side === "L" ? -1 : 1, E = cx + out * bx(ay);   // the body's edge on the arm row
+      put(g, ay, E, "s");   // the arm grows out of the body, no seam
+      if (arms[side === "L" ? "left" : "right"]) {   // reaching out, hand at the end
+        for (let i = 1; i <= 3; i++) { put(g, ay - 1, E + out * i, "d"); put(g, ay, E + out * i, "d"); }
+        put(g, ay - 1, E + out * 4, "s"); put(g, ay, E + out * 4, "s");
+        hand[side] = [ay, E + out * 4];
+        if (side === "R") wrist.push([ay, E + 3], [ay - 1, E + 3]);
+      } else {   // a stubby nub
+        put(g, ay - 1, E + out, "d"); put(g, ay - 1, E + out * 2, "d");
+        put(g, ay, E + out, "s"); put(g, ay, E + out * 2, "s"); put(g, ay, E + out * 3, "d");
+        put(g, ay + 1, E + out, "d"); put(g, ay + 1, E + out * 2, "d");
+        hand[side] = [ay, E + out * 3];
+        if (side === "R") wrist.push([ay, E + 2], [ay - 1, E + 2]);
       }
     }
-    const lo = Math.max(2, Math.floor(tw / 4) + 1);   // legs: two wide, lo from the middle; shoes one wider
-    for (let y = torsoBot + 1; y < feetY; y++) for (const x of [cx - lo, cx - lo + 1, cx + lo - 1, cx + lo]) put(g, y, x, "d");
-    for (const x of [cx - lo - 1, cx - lo, cx - lo + 1, cx + lo - 1, cx + lo, cx + lo + 1]) put(g, feetY, x, "k");
+    const fo = Math.round(brx * 0.45);   // feet: two little ovals, a shade darker, poking out under the body
+    for (const fx of [cx - fo - 2, cx + fo - 1]) { for (let i = 0; i < 4; i++) put(g, feetY, fx + i, "u"); put(g, feetY + 1, fx + 1, "u"); put(g, feetY + 1, fx + 2, "u"); }
   } else {   // a ghost keeps its little stub arms
-    const ay = Math.round(cy + ry * 0.15);
-    if (arms.right) { const x0 = Math.round(cx + rx); put(g, ay, x0, "d"); put(g, ay, x0 + 1, "d"); put(g, ay - 1, x0 + 2, "s"); put(g, ay, x0 + 2, "s"); hand.R = [ay, x0 + 2]; }
-    if (arms.left) { const x0 = Math.round(cx - rx); put(g, ay, x0, "d"); put(g, ay, x0 - 1, "d"); put(g, ay - 1, x0 - 2, "s"); put(g, ay, x0 - 2, "s"); hand.L = [ay, x0 - 2]; }
+    const gy = Math.round(cy + ry * 0.15);
+    if (arms.right) { const x0 = Math.round(cx + rx); put(g, gy, x0, "d"); put(g, gy, x0 + 1, "d"); put(g, gy - 1, x0 + 2, "s"); put(g, gy, x0 + 2, "s"); hand.R = [gy, x0 + 2]; }
+    if (arms.left) { const x0 = Math.round(cx - rx); put(g, gy, x0, "d"); put(g, gy, x0 - 1, "d"); put(g, gy - 1, x0 - 2, "s"); put(g, gy, x0 - 2, "s"); hand.L = [gy, x0 - 2]; }
   }
   if (scooter) {
-    const deck = ghost ? base : feetY + 1, L = Math.round(cx - rx * 0.75), R = Math.round(cx + rx * 0.75);
+    const deck = ghost ? base : feetY + 2, L = Math.round(cx - brx * 0.7), R = Math.round(cx + brx * 0.7);
     for (let x = L; x <= R; x++) { put(g, deck, x, "y"); put(g, deck + 1, x, "y"); }
     for (const X of [L + 1, R - 2]) { put(g, deck + 2, X, "k"); put(g, deck + 2, X + 1, "k"); put(g, deck + 3, X, "k"); put(g, deck + 3, X + 1, "k"); put(g, deck + 2, X + 1, "Y"); }
-    const hb = R + 3, poleTop = ghost ? Math.round(cy - 1) : torsoTop + 1;
+    const hb = ghost ? R + 3 : (hand.R ? hand.R[1] + 1 : Math.round(cx + brx) + 4), poleTop = ghost ? Math.round(cy - 1) : ay;
     for (let y = poleTop; y <= deck + 1; y++) put(g, y, hb, "y");
     put(g, poleTop - 1, hb - 1, "k"); put(g, poleTop - 1, hb, "k"); put(g, poleTop - 1, hb + 1, "k");
     put(g, deck + 2, hb, "k"); put(g, deck + 3, hb, "k"); put(g, deck + 3, hb - 1, "k"); put(g, deck + 3, hb + 1, "k");
@@ -240,15 +242,16 @@ export function drawPet(o) {
         for (let x = eyes[0] - 1; x <= eyes[1] + 2; x++) if (g[yy][x] !== ".") put(g, yy, x, (x % 2) ? "g" : "G");
         put(g, yy + 1, mx - 1, "g"); put(g, yy + 1, mx + 1, "g"); put(g, yy + 1, mx, "w"); put(g, yy + 2, mx, "g"); put(g, yy + 3, mx, "w");
       } else {   // round the neck, pendant on the chest
-        for (let x = cx - half; x <= cx + half; x++) put(g, torsoTop, x, (x % 2) ? "g" : "G");
-        put(g, torsoTop + 1, mx - 1, "g"); put(g, torsoTop + 1, mx + 1, "g"); put(g, torsoTop + 1, mx, "w"); put(g, torsoTop + 2, mx, "g"); put(g, torsoTop + 3, mx, "w");
+        const yy = base + 1;
+        for (let x = cx - bx(yy); x <= cx + bx(yy); x++) put(g, yy, x, (x % 2) ? "g" : "G");
+        put(g, yy + 1, mx - 1, "g"); put(g, yy + 1, mx + 1, "g"); put(g, yy + 1, mx, "w"); put(g, yy + 2, mx, "g"); put(g, yy + 3, mx, "w");
       }
     }
     if (it.proc === "shades") { for (let x = eyes[0] - 1; x <= eyes[1] + 2; x++) { put(g, eyeY - 1, x, "k"); put(g, eyeY, x, "k"); put(pu, eyeY - 1, x, "."); put(pu, eyeY, x, "."); } put(g, eyeY - 1, eyes[0], "x"); put(g, eyeY - 1, eyes[1], "x"); }
     if (it.proc === "cartier") { for (const X of eyes) { put(g, eyeY - 2, X, "g"); put(g, eyeY - 2, X + 1, "g"); put(g, eyeY + 1, X, "g"); put(g, eyeY + 1, X + 1, "g"); put(g, eyeY - 1, X - 1, "g"); put(g, eyeY, X - 1, "g"); put(g, eyeY - 1, X + 2, "g"); put(g, eyeY, X + 2, "g"); } put(g, eyeY - 1, mx, "g"); }
     if (it.proc === "grill") for (let x = mx - 1; x <= mx + 1; x++) { put(g, my, x, "g"); if (face === "stuffed") put(g, my + 1, x, "g"); }
     if (it.proc === "belly") {   // the V, on the chest
-      const by = ghost ? Math.round(cy + ry * 0.35) : torsoTop + 2;
+      const by = ghost ? Math.round(cy + ry * 0.35) : bcy + 1;
       put(g, by - 1, mx - 2, "o"); put(g, by - 1, mx + 2, "o"); put(g, by, mx - 1, "o"); put(g, by, mx + 1, "o"); put(g, by + 1, mx, "o");
     }
     if (it.proc === "wrist") wrist.forEach(([y, x], i) => put(g, y, x, i ? "G" : "g"));
