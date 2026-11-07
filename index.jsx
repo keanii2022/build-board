@@ -1346,7 +1346,7 @@ function buildCloset(fly, bb, wrap) {   // stats, the shop, what's collected
   const feelsLine = { fed: "full and happy", peckish: "could eat", hungry: "hungry",
     ghost: left === 1 ? "a ghost. barely here" : "a ghost. fading", stuffed: "stuffed. nap time" }[v.face] || v.faceWord;
   const stats = v.hatched
-    ? row("feels", esc(feelsLine)) + row("body", esc(v.stageWord)) +
+    ? `<span>feels</span><b style="grid-column: 2 / -1">${esc(feelsLine)}</b>` + row("body", esc(v.stageWord)) +   /* feels gets the whole row: "a ghost. fading" doesn't fit a half */
       row("ate today", `${v.today} step${v.today === 1 ? "" : "s"}`) +
       row("wallet", `${coins} coin${coins === 1 ? "" : "s"}`) + row("stuff", `${owned.length} of ${ITEMS.length}`) +
       row("finished", `${pet.trophies.length} project${pet.trophies.length === 1 ? "" : "s"}`) + row("steps so far", `${pet.steps}`)
