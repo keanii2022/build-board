@@ -446,6 +446,7 @@ function mountStageIn(canvas, host) {   // first time: load three and build him;
       memory.stageLoading = false;
       if (!memory.stageOpen || memory.stageCtrl) return;
       memory.stageCtrl = mountStage(canvas, m.body, { pupils: m.pupils, accent: S.spectrum[1] || S.accent, roll: memory.view.stage >= 5,
+        onBug: () => { if (Math.random() < 0.7) say(BUG_LINES[Math.floor(Math.random() * BUG_LINES.length)], 2000); },
         onDizzy: () => { say(DIZZY_LINES[Math.floor(Math.random() * DIZZY_LINES.length)], 2600); play(S.cute.petMadSound, undefined, 0.6);
           if (memory.pet) { memory.pet.dizzy = (memory.pet.dizzy || 0) + 1; savePet(); checkFriends(memory.pet, memory.data, memory.view, Math.floor(Date.now() / 1000)); } } });
       memory.stageKey = m.key;
@@ -493,6 +494,7 @@ function StageCol({ view, pet, mood, now }) {   // he lives here, beside the lis
       <div className="bb-stage-top"><b>{nm || (hatched ? "the pet" : "an egg")}</b><span>{hatched ? `${view.faceWord} · ${view.stageWord}` : ""}</span></div>
       <Pet view={view} mood={mood} now={now} />
       {hatched ? <div className="bb-stage-box"><canvas className="bb-stage" onMouseMove={stageLook} onClick={stagePoke} title="poke · drag to spin" /></div> : null}
+      {hatched ? <div className="bb-say-stage" /> : null}
       <div className="bb-stage-err" />
       {owned.length ? <div className="bb-stage-things">{owned.map((it) => <Thumb key={it.id} item={it} />)}</div> : null}
     </div>
@@ -979,6 +981,15 @@ function styles(busy) {
       box-shadow: inset 0 0 0 1px ${S.edge}, 0 6px 18px rgba(0,0,0,0.4); opacity: 0; transform: translateY(4px) scale(.9); transform-origin: 100% 100%;
       transition: opacity .18s ease, transform .18s cubic-bezier(.2,1.4,.4,1); pointer-events: none; z-index: 6; }
     .bb-say.show { opacity: 1; transform: none; }
+    .bb-say-stage { position: absolute; left: 50%; top: 22%; z-index: 6; pointer-events: none; max-width: 78%; text-align: center; white-space: normal; line-height: 1.3;
+      font-size: 11.5px; font-weight: 600; color: ${S.text}; padding: 6px 11px; border-radius: 12px; background: rgba(28,27,36,0.97);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), 0 10px 26px rgba(0,0,0,0.45); transform-origin: 50% 100%;
+      opacity: 0; transform: translate(-50%, 8px) scale(.6); transition: opacity .16s ease, transform .22s ease; }
+    .bb-say-stage::after { content: ""; position: absolute; left: 50%; top: 100%; margin-left: -5px; border: 5px solid transparent; border-top-color: rgba(28,27,36,0.97); }
+    .bb-say-stage.show { opacity: 1; transform: translate(-50%, 0) rotate(var(--tilt, 0deg)); animation: bb-say-pop .5s cubic-bezier(.3,1.6,.4,1), bb-say-float 2.6s ease-in-out .5s infinite; }
+    .bb-say-stage.bye { opacity: 0; transform: translate(-50%, -16px) scale(.9) rotate(var(--tilt, 0deg)); transition: opacity .4s ease, transform .45s ease; animation: none; }
+    @keyframes bb-say-pop { 0% { transform: translate(-50%, 10px) scale(.5) rotate(-6deg); } 60% { transform: translate(-50%, -3px) scale(1.08) rotate(2deg); } 100% { transform: translate(-50%, 0) scale(1) rotate(var(--tilt, 0deg)); } }
+    @keyframes bb-say-float { 0%, 100% { transform: translate(-50%, 0) rotate(var(--tilt, 0deg)); } 50% { transform: translate(-50%, -4px) rotate(calc(var(--tilt, 0deg) * -1)); } }
     .bb-closet { width: 290px; }
     .bb-closet .name { cursor: text; border-bottom: 1px dashed transparent; }
     .bb-closet .name:hover { border-bottom-color: ${S.muted}; }
@@ -1412,13 +1423,20 @@ function savePet() {
   memory.petSaved = json;
   run(`${FIND_DIR}; printf '%s' ${sh(json)} > ${PET_FILE}`);
 }
-function say(line, ms) {
-  const el = document.querySelector(".bb-say");
+function say(line, ms) {   // a bubble by his head: pops in crooked, types itself out, floats, drifts off
+  const el = document.querySelector(".bb-say-stage") || document.querySelector(".bb-say");
   if (!el || !line) return;
-  el.textContent = line; el.classList.add("show");
-  clearTimeout(memory.sayT); memory.sayT = setTimeout(() => el.classList.remove("show"), ms || 2600);
+  clearTimeout(memory.sayT); clearInterval(memory.typeT);
+  el.classList.remove("show", "bye"); el.textContent = ""; void el.offsetWidth;
+  el.style.setProperty("--tilt", (Math.random() * 6 - 3).toFixed(1) + "deg");
+  el.classList.add("show");
+  let i = 0; const step = Math.max(14, Math.min(34, 900 / line.length));   // long lines type faster
+  memory.typeT = setInterval(() => { i++; el.textContent = line.slice(0, i); if (i >= line.length) clearInterval(memory.typeT); }, step);
+  const hold = (ms || 2600) + Math.min(1200, line.length * step);
+  memory.sayT = setTimeout(() => { el.classList.add("bye"); memory.sayT = setTimeout(() => el.classList.remove("show", "bye"), 450); }, hold);
   speak(line);
 }
+const BUG_LINES = ["stop it.", "not now.", "it's doing the thing again.", "i was busy.", "ok. ok. i see you.", "why are you like this.", "personal space."];
 function queueLine(l) { memory.lineQ = l; }
 // ── Things: where they are, and the bits they do on their own ───────────────
 const SLOT_OF = { hat: "head", shades: "eyes", cartier: "eyes", chain: "neck", grill: "mouth", swap: "body", belly: "body", wrist: "wrist", lip: "lip" };

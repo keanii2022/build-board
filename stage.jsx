@@ -6,7 +6,7 @@
 // Exports:
 //   loadThree(opts?)                 -> Promise<THREE>
 //   mountStage(canvas, model, opts?) -> { look, poke, wasDrag, isDizzy, setRoll, setFriends, pokeFriend, getFriends, setModel, dispose, ready }
-//     opts: pupils, scale, bg, accent, roll (ball mode), onDizzy()
+//     opts: pupils, scale, bg, accent, roll (ball mode), onDizzy(), onBug(friendId)
 //   renderThumb(model, size?, opts?) -> Promise<dataURL>
 //
 // Model: { voxels: [{ x, y, z, c }], w, h, d }  (y = row from the TOP)
@@ -309,7 +309,8 @@ export function mountStage(canvas, model, opts = {}) {
     roll: !!opts.roll,
     drag: null, dragEnd: -Infinity, wasDrag: false, dx: 0, dy: 0,
     dizzyAt: -Infinity, dizzy: false,
-    friends: [], room: null, pendingFriends: null,
+    friends: [], room: null, pendingFriends: null, q: null,
+    flinchAt: -Infinity, flinchDx: 0, flinchDz: 1,
     ro: null,
   };
   const now = () => performance.now();
@@ -448,13 +449,14 @@ export function mountStage(canvas, model, opts = {}) {
     const group = new st.THREE.Group();
     group.add(mesh);
     st.room.add(group);
-    const f = {
-      id, model, mesh, group, bounds: b, fw: b.w * fs, fs,
-      pos: { x: 0, z: 0 }, target: { x: 0, z: 0 }, face: 0,
-      state: "pause", pauseUntil: tNow + 300 + Math.random() * 1200, seed: Math.random() * 10,
-      bornAt: tNow, hopAt: -Infinity, spinAt: -Infinity, walked: 0,
+    return {
+      id, model, mesh, group, bounds: b, fw: b.w * fs, fh: b.h * fs, fs,
+      pos: { x: 0, z: 0 }, target: { x: 0, z: 0 }, face: 0, heading: 0, lookUntil: 0,
+      mode: "pause", until: tNow + 300 + Math.random() * 1200, seed: Math.random() * 10,
+      hop: null, air: 0, landAt: -Infinity, nextHopAt: 0, arrive: null,
+      phase: null, bumps: 0, bumped: 0, zAng: 0, zLeft: 0, zDir: 1, zR: 0,
+      bornAt: tNow, hopAt: -Infinity, spinAt: -Infinity,
     };
-    return f;
   };
   const disposeFriend = (f) => {
     disposeMesh(f.mesh);
@@ -474,50 +476,176 @@ export function mountStage(canvas, model, opts = {}) {
       st.friends.push(f);
       pickTarget(f);
       f.pos.x = f.target.x; f.pos.z = f.target.z;
-      f.face = Math.random() * TAU;
+      f.face = f.heading = Math.random() * TAU;
       f.group.position.set(f.pos.x, 0, f.pos.z);
       f.group.scale.set(0.001, 0.001, 0.001);
     }
     st.sceneKit.fit(frameBounds());
     fit();
   };
+  // -- friend behaviour: hop gait + wander / pester / zoomies
+  const HOP_AIR = 0.35, HOP_GAP = 120, ZOOM_AIR = 0.22, ZOOM_GAP = 20;
+  const wrapAng = (a) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
+  // pet footprint radius (room space) in direction ang, treated as an ellipse hx × hz
+  const petEdge = (ang) => {
+    const b = st.pet.bounds, c = Math.cos(ang), sn = Math.sin(ang);
+    return (b.hx * b.hz) / Math.max(Math.hypot(b.hz * c, b.hx * sn), 1e-6);
+  };
+  const startHop = (f, tx, tz, air, tNow) => {
+    f.hop = { x0: f.pos.x, z0: f.pos.z, x1: tx, z1: tz, t0: tNow, dur: air * 1000 };
+    f.heading = Math.atan2(tx - f.pos.x, tz - f.pos.z);
+  };
+  // one hop toward (tx,tz), at most len long; true when this hop lands on it
+  const hopToward = (f, tx, tz, len, air, tNow) => {
+    const dx = tx - f.pos.x, dz = tz - f.pos.z, d = Math.hypot(dx, dz);
+    if (d <= len) { startHop(f, tx, tz, air, tNow); return true; }
+    startHop(f, f.pos.x + (dx / d) * len, f.pos.z + (dz / d) * len, air, tNow);
+    return false;
+  };
+  const setPause = (f, tNow, ms) => {
+    f.mode = "pause"; f.phase = null; f.arrive = null;
+    f.until = tNow + (ms != null ? ms : 1000 + Math.random() * 3000);
+  };
+  const startZoomies = (f, tNow, laps) => {
+    const b = st.pet.bounds;
+    f.mode = "zoomies"; f.phase = "run";
+    f.zR = Math.max(1.4 * b.hx, Math.hypot(b.hx, b.hz) + f.fw * 0.6);
+    f.zAng = Math.atan2(f.pos.z, f.pos.x);
+    f.zLeft = laps * TAU;
+    f.zDir = Math.random() < 0.5 ? 1 : -1;
+  };
+  const pickMode = (f, tNow) => {
+    const r = Math.random();
+    if (r < 0.4) { pickTarget(f); f.mode = "wander"; f.arrive = "pause"; }
+    else if (r < 0.75) { f.mode = "pester"; f.phase = "approach"; f.bumps = 2 + Math.floor(Math.random() * 2); f.bumped = 0; }
+    else startZoomies(f, tNow, 1 + Math.floor(Math.random() * 2));
+  };
+  const petFlinch = (f, tNow) => {
+    const d = Math.hypot(f.pos.x, f.pos.z) || 1;
+    st.flinchAt = tNow; st.flinchDx = f.pos.x / d; st.flinchDz = f.pos.z / d;
+  };
+  const onLand = (f, tNow) => {
+    if (f.mode === "wander") {
+      if (f.arrive === "pause") setPause(f, tNow);
+    } else if (f.mode === "pester") {
+      if (f.phase === "approaching") { f.phase = "bump"; f.until = tNow + 150; }
+      else if (f.phase === "contact") {
+        petFlinch(f, tNow);
+        if (f.bumped === 0 && typeof opts.onBug === "function") { try { opts.onBug(f.id); } catch (err) { console.error(err); } }
+        f.bumped++;
+        const ang = Math.atan2(f.pos.z, f.pos.x), r = petEdge(ang) + f.fw * 1.55;   // recoil: one friend-width back off the edge
+        startHop(f, Math.cos(ang) * r, Math.sin(ang) * r, 0.3, tNow);
+        f.heading = Math.atan2(-f.pos.x, -f.pos.z);   // keep glaring at the pet while recoiling
+        f.phase = "recoil";
+      } else if (f.phase === "recoil") {
+        if (f.bumped < f.bumps) { f.phase = "bump"; f.until = tNow + 500 + Math.random() * 500; }
+        else { pickTarget(f); f.mode = "wander"; f.arrive = "pause"; f.phase = null; }
+      }
+    } else if (f.mode === "zoomies") {
+      if (f.phase === "run" && f.zLeft <= 0) { f.mode = "dizzy"; f.until = tNow + 1000; }
+    }
+  };
+  const think = (f, tNow) => {
+    switch (f.mode) {
+      case "pause":
+        if (tNow >= f.until) { pickMode(f, tNow); if (f.mode !== "pause") think(f, tNow); }
+        else if (tNow > f.lookUntil && Math.random() < 0.004) {   // glance at the pet now and then
+          f.lookUntil = tNow + 800 + Math.random() * 900;
+          f.heading = Math.atan2(-f.pos.x, -f.pos.z);
+        }
+        break;
+      case "wander": {
+        const len = f.fw * (2 + Math.random());
+        const b = st.pet.bounds, foot = Math.hypot(b.hx, b.hz) + f.fw * 0.6;
+        // would the straight line to the target cut through the pet? then hop around it instead
+        const px = f.pos.x, pz = f.pos.z, vx = f.target.x - px, vz = f.target.z - pz, vv = vx * vx + vz * vz;
+        const u = vv > 0 ? Math.max(0, Math.min(1, -(px * vx + pz * vz) / vv)) : 0;
+        const near = Math.hypot(px + vx * u, pz + vz * u);
+        if (near < foot && u > 0 && u < 1) {
+          const a0 = Math.atan2(pz, px), d = wrapAng(Math.atan2(f.target.z, f.target.x) - a0);
+          const r = Math.max(Math.hypot(px, pz), foot);
+          const a = a0 + Math.sign(d || 1) * Math.min(Math.abs(d), len / r);
+          startHop(f, Math.cos(a) * r, Math.sin(a) * r, HOP_AIR, tNow);
+        } else {
+          hopToward(f, f.target.x, f.target.z, len, HOP_AIR, tNow);
+        }
+        break;
+      }
+      case "pester": {
+        if (f.phase === "approach") {
+          const ang = Math.atan2(f.pos.z, f.pos.x);
+          const r = petEdge(ang) + f.fw * 0.55;
+          if (hopToward(f, Math.cos(ang) * r, Math.sin(ang) * r, f.fw * (2 + Math.random()), HOP_AIR, tNow)) f.phase = "approaching";
+        } else if (f.phase === "bump" && tNow >= f.until) {
+          // lunge from wherever the recoil left it to just inside the pet's edge (a nudge, not a merge)
+          const ang = Math.atan2(f.pos.z, f.pos.x), r = petEdge(ang) + f.fw * 0.4;
+          startHop(f, Math.cos(ang) * r, Math.sin(ang) * r, 0.22, tNow);
+          f.phase = "contact";
+        }
+        break;
+      }
+      case "zoomies": {
+        const step = (f.fw * 1.8) / f.zR;
+        const onRing = Math.abs(Math.hypot(f.pos.x, f.pos.z) - f.zR) < f.fw * 0.5;
+        if (!onRing) {   // get to the ring first
+          hopToward(f, Math.cos(f.zAng) * f.zR, Math.sin(f.zAng) * f.zR, f.fw * 2.5, HOP_AIR, tNow);
+        } else {
+          f.zAng += f.zDir * step; f.zLeft -= step;
+          startHop(f, Math.cos(f.zAng) * f.zR, Math.sin(f.zAng) * f.zR, ZOOM_AIR, tNow);
+        }
+        break;
+      }
+      case "dizzy":
+        if (tNow >= f.until) setPause(f, tNow, 1000 + Math.random() * 2000);
+        break;
+      default:
+        setPause(f, tNow);
+    }
+  };
+
   const updateFriends = (tNow, dt) => {
     if (!st.room) return;
     st.room.rotation.y = st.pet.root.rotation.y;   // the room turns with the pet
     for (const f of st.friends) {
       const fs = f.fs;
-      if (f.state === "pause") {
-        if (tNow >= f.pauseUntil) { pickTarget(f); f.state = "walk"; }
-      } else {
-        const dx = f.target.x - f.pos.x, dz = f.target.z - f.pos.z;
-        const dist = Math.hypot(dx, dz);
-        const step = 4.0 * fs * dt;   // a brisk amble: ~4 friend-voxels per second
-        if (dist <= step) {
-          f.pos.x = f.target.x; f.pos.z = f.target.z;
-          f.state = "pause"; f.pauseUntil = tNow + 500 + Math.random() * 1500;
-        } else {
-          f.pos.x += (dx / dist) * step; f.pos.z += (dz / dist) * step;
-          f.walked += step;
-          let want = Math.atan2(dx, dz);
-          let diff = want - f.face;
-          diff = ((diff + Math.PI) % TAU + TAU) % TAU - Math.PI;
-          f.face += diff * (1 - Math.exp(-8 * dt));
+      let sx = 1, sy = 1;
+      if (f.hop) {
+        const h = f.hop, p = Math.min(1, (tNow - h.t0) / h.dur);
+        f.pos.x = lerp(h.x0, h.x1, p); f.pos.z = lerp(h.z0, h.z1, p);
+        const H = (f.mode === "zoomies" ? 0.6 : 0.9) * f.fh;
+        f.air = 4 * H * p * (1 - p);
+        const to = p < 0.3 ? 1 - p / 0.3 : 0;   // stretch at take-off
+        sy *= 1 + 0.15 * to; sx *= 1 - 0.08 * to;
+        if (p >= 1) {
+          f.hop = null; f.air = 0; f.landAt = tNow;
+          f.nextHopAt = tNow + (f.mode === "zoomies" ? ZOOM_GAP : HOP_GAP);
+          onLand(f, tNow);
         }
       }
-      const walking = f.state === "walk";
-      if (!walking) {   // never quite still: a breath, a look around, the odd hop
+      if (!f.hop && tNow >= f.nextHopAt) think(f, tNow);
+      const ls = (tNow - f.landAt) / 150;   // squash on landing
+      if (ls >= 0 && ls < 1) { const e = Math.sin(Math.PI * ls); sy *= 1 - 0.2 * e; sx *= 1 + 0.15 * e; }
+
+      // facing: heading (or the pet, while glancing), smoothed
+      f.face += wrapAng(f.heading - f.face) * (1 - Math.exp(-10 * dt));
+      let roll = 0;
+      if (f.mode === "dizzy") {
+        roll = 0.15 * Math.sin(((tNow / 1000) * TAU) / 0.35);
+        f.face += Math.sin(((tNow / 1000) * TAU) / 0.5) * 0.02;
+      }
+      const resting = !f.hop && (f.mode === "pause" || f.mode === "dizzy");
+      if (resting && f.mode === "pause") {   // never quite still: a breath, a look around, the odd hop
         f.face += Math.sin(tNow / 700 + f.seed) * 0.006;
         if (Math.random() < dt * 0.12 && tNow - f.hopAt > HOP_MS * 2) f.hopAt = tNow;
       }
-      const idle = walking ? 0 : Math.sin(tNow / 260 + f.seed) * 0.06 * fs;
-      const stepBob = (walking ? Math.abs(Math.sin((f.walked / fs) * Math.PI * 0.9)) * 0.22 * fs : 0) + idle;
+      const breath = resting ? 1 + 0.03 * Math.sin(tNow / 420 + f.seed) : 1;
       const pop = easeOutBack(Math.min(1, (tNow - f.bornAt) / POP_MS));
       const hop = hopPose((tNow - f.hopAt) / HOP_MS);
       const sp = (tNow - f.spinAt) / FSPIN_MS;
       const spin = sp >= 0 && sp < 1 ? TAU * easeOutCubic(sp) : 0;
-      f.group.position.set(f.pos.x, stepBob + 0.9 * fs * hop.jump, f.pos.z);
-      f.group.rotation.y = f.face + spin;
-      f.group.scale.set(pop * hop.sx, pop * hop.sy, pop * hop.sx);
+      f.group.position.set(f.pos.x, f.air + 0.9 * fs * hop.jump, f.pos.z);
+      f.group.rotation.set(0, f.face + spin, roll);
+      f.group.scale.set(pop * hop.sx * sx, pop * hop.sy * sy * breath, pop * hop.sx * sx);
     }
   };
 
@@ -570,16 +698,23 @@ export function mountStage(canvas, model, opts = {}) {
     const breath = 1 + 0.025 * Math.sin((st.t * TAU) / 2.6);
     let bob = 0.15 * sv * Math.sin((st.t * TAU) / 3.0);
     bob += dizzyAmp * 0.2 * sv * Math.sin((st.t * TAU) / 0.45);
-    pet.body.rotation.z = dizzyAmp * 0.12 * Math.sin((st.t * TAU) / 0.6);
+    const sway = dizzyAmp * 0.12 * Math.sin((st.t * TAU) / 0.6);
 
     // ---- poke: squash / stretch / overshoot + small jump
+    updateFriends(tNow, dt);   // friends first: a pester bump may start a flinch
     const hop = hopPose((tNow - st.hopAt) / HOP_MS);
     bob += 0.9 * sv * hop.jump;
-    pet.body.scale.set(hop.sx, hop.sy * breath, hop.sx);
+    const fp = (tNow - st.flinchAt) / 350;
+    const fe = fp >= 0 && fp < 1 ? Math.sin(Math.PI * fp) : 0;   // flinch: small squash + 0.15 rad lean away
+    pet.body.scale.set(hop.sx * (1 + 0.1 * fe), hop.sy * breath * (1 - 0.1 * fe), hop.sx * (1 + 0.1 * fe));
     pet.root.position.y = bob;
-
-    // ---- friends
-    updateFriends(tNow, dt);
+    const Q = st.q;
+    Q.body.setFromAxisAngle(Q.z, sway);
+    if (fe > 0) {
+      Q.a.set(-st.flinchDz, 0, st.flinchDx);   // tips the top away from the friend
+      Q.body.premultiply(Q.t.setFromAxisAngle(Q.a, 0.15 * fe));
+    }
+    pet.body.quaternion.copy(Q.body);
 
     // ---- pupils: follow pointer, blink, dizzy orbit
     if (pet.pupilGroup) {
@@ -624,6 +759,7 @@ export function mountStage(canvas, model, opts = {}) {
   const ready = loadThree(opts).then((THREE) => {
     if (!st.mounted) return;
     st.THREE = THREE;
+    st.q = { z: new THREE.Vector3(0, 0, 1), a: new THREE.Vector3(), t: new THREE.Quaternion(), body: new THREE.Quaternion() };
     st.renderer = makeRenderer(THREE, canvas);
     st.sceneKit = makeScene(THREE, accent);
     st.scene = st.sceneKit.scene;
@@ -679,11 +815,11 @@ export function mountStage(canvas, model, opts = {}) {
       else st.pendingFriends = list || [];
     },
     getFriends() {
-      return st.friends.map((f) => ({ id: f.id, x: f.pos.x, z: f.pos.z, walking: f.state === "walk" }));
+      return st.friends.map((f) => ({ id: f.id, x: f.pos.x, z: f.pos.z, y: f.air, mode: f.mode, walking: !!f.hop }));
     },
     pokeFriend(id) {
       const f = st.friends.find((x) => x.id === String(id));
-      if (f) { f.hopAt = now(); f.spinAt = now(); }
+      if (f) { f.hopAt = now(); f.spinAt = now(); startZoomies(f, now(), 1); f.nextHopAt = now() + 350; }
     },
     dispose() {
       st.mounted = false;
