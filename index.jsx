@@ -237,7 +237,8 @@ function ago(ts, now) {
 
 function sh(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
 // ── The lock: a password over the glass. Click the field and type; enter submits. ─────────
-const PIN_KEY = "build-board.pin";
+const PIN_KEY = "build-board.pin", LOCK_KEY = "build-board.locked";
+function refreshWidget() { try { run(`osascript -e 'tell application "Übersicht" to refresh'`); } catch (e) {} }
 async function pinHash(p) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("bb:" + p)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
 function pinStored() { try { return localStorage.getItem(PIN_KEY) || ""; } catch (e) { return ""; } }
 function askPin(reason, then, cancellable) { memory.pin = { mode: pinStored() ? "enter" : "set", reason, then, entry: "", first: "", err: false, cancellable }; redraw(); }
@@ -253,16 +254,16 @@ function pinSubmit(code) {
   }
   pinHash(code).then((h) => { if (h === pinStored()) pinDone(); else { P.err = "no."; play(S.cute.petMadSound, undefined, 1.2); redraw(); } });
 }
-function pinDone() { const P = memory.pin; memory.pin = null; memory.locked = false; memory.lastActive = Date.now(); play(S.cute.clickSound); if (P && P.then) P.then(); redraw(); }
+function pinDone() { const P = memory.pin; memory.pin = null; memory.locked = false; memory.lastActive = Date.now(); try { localStorage.removeItem(LOCK_KEY); } catch (e) {} play(S.cute.clickSound); if (P && P.then) P.then(); redraw(); }
 function pinCancel() { if (memory.pin && memory.pin.cancellable) { memory.pin = null; redraw(); } }
 function touch() { memory.lastActive = Date.now(); }
 function checkIdle() {
   const m = S.lock && S.lock.idleMinutes;
   if (!m || memory.locked || memory.pin) return;
-  if (Date.now() - (memory.lastActive || 0) > m * 60000) { memory.locked = true; askPin("locked", null, false); }
+  if (Date.now() - (memory.lastActive || 0) > m * 60000) { memory.locked = true; try { localStorage.setItem(LOCK_KEY, "1"); } catch (e) {} askPin("locked", null, false); }   // the lock survives a refresh
 }
 function guarded(fn, what) { if (S.lock && S.lock.onOpen) askPin(what ? `open ${what}` : "open", fn, true); else fn(); }
-function focusLock(el) { if (el && document.activeElement !== el) setTimeout(() => { try { el.focus(); } catch (e) {} }, 30); }
+function focusLock(el) { if (el && document.activeElement !== el) setTimeout(() => { try { window.focus(); el.focus(); el.select && el.select(); } catch (e) {} }, 30); }
 function LockPad() {
   const P = memory.pin; if (!P) return null;
   const title = P.mode === "set" ? "set a password" : P.mode === "confirm" ? "once more" : P.reason === "locked" ? "locked" : P.reason;
@@ -286,6 +287,7 @@ function LockPad() {
           <span className="go" onClick={(e) => { const i = e.currentTarget.closest(".bb-lock-card").querySelector("input"); pinSubmit(i.value); i.value = ""; }}>enter</span>
           {P.cancellable ? <span className="go dim" onClick={pinCancel}>cancel</span> : null}
         </div>
+        <span className="bb-refresh" onClick={refreshWidget} title="reload the widget (stays locked)">↻</span>
         <div className="e">{P.err || "\u00a0"}</div>
       </div>
     </div>
@@ -931,6 +933,9 @@ function styles(busy) {
     .bb-lock .go.dim { background: transparent; color: ${S.muted}; }
     .bb-lock .e { margin-top: 10px; font-size: 10px; color: ${S.spectrum[3] || S.accent}; min-height: 14px; }
     .bb-lock.err .bb-lock-in { animation: bb-shake .4s ease; }
+    .bb-refresh { position: absolute; left: 18px; bottom: 10px; z-index: 61; font-size: 13px; line-height: 1; color: ${S.muted}; opacity: .35; cursor: pointer; user-select: none; -webkit-user-select: none; transition: opacity .2s, transform .3s; }
+    .bb-refresh:hover { opacity: 1; transform: rotate(90deg); }
+    .bb > .bb-refresh { left: 46px; bottom: 11px; z-index: 3; }   /* next to the sound toggle */
     @keyframes bb-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
     .bb-proj { position: relative; }
     ${S.stepsStyle === "flyout" ? `
@@ -2118,6 +2123,7 @@ function renderBoard({ output, error }) {
           <Px rows={SPK_OFF} s={2} className="lv0" /><Px rows={SPK_1} s={2} className="lv1" /><Px rows={SPK_ON} s={2} className="lv2" /><Px rows={SPK_3} s={2} className="lv3" />
         </span>
       ) : null}
+      <span className="bb-refresh" onClick={(e) => { e.stopPropagation(); refreshWidget(); }} onMouseDown={(e) => e.stopPropagation()} title="reload the widget">↻</span>
       <span className="bb-edge" onMouseDown={(e) => startResize(e, "w")} title="drag for width" />
       <span className="bb-edge l" onMouseDown={(e) => startResize(e, "l")} title="drag for width" />
       <span className="bb-grip l" onMouseDown={(e) => startResize(e, "lh")} onDoubleClick={resetSize} title="drag to resize · double-click to reset" />
@@ -2132,6 +2138,7 @@ class Board extends React.Component {
     memory.redraw = () => this.forceUpdate(); placeChest(); placeStage();
     if (S.lock && S.lock.reset) { try { localStorage.removeItem(PIN_KEY); } catch (e) {} }
     if (!memory.idleT) memory.idleT = setInterval(checkIdle, 15000);
+    try { if (localStorage.getItem(LOCK_KEY) && pinStored() && !memory.pin) { memory.locked = true; askPin("locked", null, false); } } catch (e) {}   // locked before the refresh, locked after
     if (!memory.keyT) { memory.keyT = true; window.addEventListener("keydown", (e) => { if (!memory.pin) return; const i = document.querySelector(".bb-lock-in"); if (i && document.activeElement !== i && e.key.length === 1) { i.focus(); } if (e.key === "Escape") pinCancel(); }); }
   }
   componentDidUpdate() { placeChest(); placeStage(); }
