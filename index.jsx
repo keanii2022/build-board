@@ -240,7 +240,7 @@ function sh(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
 // ── The lock: a password over the glass. Click the field and type; enter submits. ─────────
 const PIN_KEY = "build-board.pin", PIN2_KEY = "build-board.pin2", LOCK_KEY = "build-board.locked";   // quick password, company password, and whether we're locked
 const LOCK_PX = ["..YYY..", ".Y...Y.", ".Y...Y.", "YYYYYYY", "YYYYYYY", "YYYkYYY", "YYYYYYY", ".YYYYY."];
-function refreshWidget() { try { run(`osascript -e 'tell application "Übersicht" to refresh'`); } catch (e) {} }
+function refreshWidget() { try { location.reload(); } catch (e) {} }   // the widgets page reloads itself: no AppleScript, nothing gets activated or un-minimized
 async function pinHash(p) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("bb:" + p)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
 function pinStored(strong) { try { return localStorage.getItem(strong ? PIN2_KEY : PIN_KEY) || ""; } catch (e) { return ""; } }
 function askPin(reason, then, cancellable, strong) { memory.pin = { mode: pinStored(strong) ? "enter" : "set", reason, then, entry: "", first: "", err: false, cancellable, strong: !!strong }; redraw(); }
