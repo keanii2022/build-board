@@ -127,6 +127,7 @@ const SETTINGS = {
 
   // ── Clicks ────────────────────────────────────────────────────────────────
   lock: { idleMinutes: 10, onOpen: true, reset: false },   // two passwords, set when first asked, kept hashed in this widget's own storage, never in a file: a quick one (idle lock after idleMinutes, 0 = never; before any project opens; the lock button) and a company one (shift-click or double-click the lock button; only it opens that lock, and it opens the quick lock too). reset: true forgets both on the next refresh
+  lockInPrompt: "/step",     // the LOCK IN button: a random project from the board opens in Claude Code with this already typed. "" = just open it
   clickOpens: "claude",       // "claude" = a new Claude Code session in that folder. "editor" = the app below. "" = nothing.
   openWith: "Visual Studio Code",
   boardUrl: "https://github.com/keanii2022",   // opens when you click the title (your GitHub)
@@ -301,12 +302,12 @@ function LockPad() {
     </div>
   );
 }
-function openPath(p) {
+function openPath(p, prompt) {
   if (!S.clickOpens || !p) return;
   play(S.cute.clickSound);
   if (S.clickOpens === "claude") {
     const folder = p.endsWith(".json") ? p.replace(/\/[^/]+$/, "") : p;
-    run(`open ${sh("claude://code/new?folder=" + encodeURIComponent(folder) + "&source=build-board")}`);
+    run(`open ${sh("claude://code/new?folder=" + encodeURIComponent(folder) + (prompt ? "&prompt=" + encodeURIComponent(prompt) : "") + "&source=build-board")}`);
   } else if (S.openWith) {
     run(`open -a ${sh(S.openWith)} ${sh(p)}`);
   }
@@ -869,6 +870,10 @@ function styles(busy) {
     .bb-swap:hover { opacity: 1 !important; transform: scale(1.25); }
     .bb-title .g { background: ${SPECTRUM}; -webkit-background-clip: text; background-clip: text; color: transparent; }
     .bb-stamp { color: ${S.muted}; font-size: 9px; }
+    .bb-lockin { margin-left: auto; margin-right: 12px; font-size: 8.5px; font-weight: 600; letter-spacing: .14em; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.16); color: ${S.text}; opacity: .8; user-select: none; -webkit-user-select: none; transition: background .15s, opacity .15s, transform .15s; }
+    .bb-lockin:hover { background: rgba(255,255,255,0.08); opacity: 1; }
+    .bb-lockin:active { transform: scale(.96); }
     .bb-today { color: ${S.muted}; font-size: 9.5px; margin: 0 0 8px; }
     .bb-today b { color: ${S.text}; font-weight: 600; }
     .bb-rule { height: 1px; background: ${SPECTRUM}; opacity: 0.7; margin: 0 0 12px; }
@@ -1999,6 +2004,20 @@ function placeChest() {   // after every draw: the card sits beside the chest (o
   if (body) body.style.maxHeight = Math.max(80, floor - top - headH - 30) + "px";   // 30 = the card's padding and its 6px lift
 }
 
+// LOCK IN: no choosing. A random project off the board (one with steps left, if any) opens in Claude Code with /step typed.
+const LOCKIN_LINES = ["lock in.", "no thinking. go.", "this one. now.", "the dice have spoken.", "pick made. move.", "we ride."];
+function lockIn(e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const all = (memory.boardRepos || []).filter((p) => p.path);
+  if (!all.length) { say("nothing on the board to lock in on.", 2200); return; }
+  let pool = all.filter((p) => p.ok && p.total > 0 && p.done < p.total);
+  if (!pool.length) pool = all;
+  if (pool.length > 1 && memory.lockInLast) pool = pool.filter((p) => p.id !== memory.lockInLast);
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  memory.lockInLast = pick.id;
+  const name = S.names[pick.id] || pick.name;
+  guarded(() => { say(`${LOCKIN_LINES[Math.floor(Math.random() * LOCKIN_LINES.length)]} ${name}.`, 3000); play(S.cute.hatchSound); openPath(pick.path, S.lockInPrompt || ""); }, `lock in: ${name}`);
+}
 function Title() {
   if (!S.title) return null;
   const w = S.titleGradientWord;
@@ -2054,6 +2073,7 @@ function renderBoard({ output, error }) {
   const stored = all.filter((p) => !board.includes(p.id)).sort((a, b) => (b.activityAt || 0) - (a.activityAt || 0));   // the chest
   const track = all.find((p) => p.id === "tools" && board.includes("tools"));   // hand-kept, no repo: sits apart at the bottom
   const repos = board.map((id) => all.find((p) => p.id === id)).filter((p) => p && p.id !== "tools");
+  memory.boardRepos = repos;   // for LOCK IN
   if (memory.lineQ) { const l = memory.lineQ; memory.lineQ = ""; setTimeout(() => say(l, 3200), 400); }
   const party = S.cute.pushParty && memory.partyAt && Date.now() - memory.partyAt < 4000;   // just pushed: the whole panel celebrates
 
@@ -2073,6 +2093,7 @@ function renderBoard({ output, error }) {
         {S.eyebrow ? <div className="bb-eyebrow">{S.eyebrow}</div> : null}
         <div className="bb-head">
           <Title />
+          {S.clickOpens ? <span className="bb-lockin" onClick={lockIn} onMouseDown={(e) => e.stopPropagation()} title="a random project from the board opens in Claude Code, /step already typed">LOCK IN</span> : null}
           {memory.screens && memory.screens.length > 1 && S.screen !== "all"
             ? <span className="bb-swap" onClick={swapScreen} onMouseDown={(e) => e.stopPropagation()} title="send to the other display">⇄</span> : null}
           <span className="bb-stamp">{data ? ago(data.generatedAt, now) : "…"}{side ? null : <Pet view={view} mood={mood} now={now} />}</span>
