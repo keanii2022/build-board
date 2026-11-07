@@ -464,8 +464,9 @@ function stageLook(e) {
   const r = e.currentTarget.getBoundingClientRect();
   memory.stageCtrl.look(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2);   // the stage wants +1 at the top
 }
-const DIZZY_LINES = ["the room is spinning.", "ok. ok. put me down.", "i see three of you.", "that was the whole step budget.", "why."];
-const HEAD_LINES = ["not the head.", "lower.", "the belly. it's right there.", "hey."];
+const DIZZY_LINES = ["the room is spinning.", "ok. ok. put me down.", "i see three of you.", "that was the whole step budget.", "why.",
+  "i'm going to be sick. in binary.", "was that necessary.", "the floor is a ceiling now.", "ok that one was fun. don't.", "i'm a pet, not a fidget."];
+const HEAD_LINES = ["not the head.", "lower.", "the belly. it's right there.", "hey.", "that's where the thoughts are.", "mind the ears.", "the hat zone is off limits."];
 function stagePoke(e) {
   e.stopPropagation();
   const ctrl = memory.stageCtrl;
@@ -1382,17 +1383,25 @@ function Burst({ kind, at }) {
 
 const LINES = {
   any: ["ouch!", "hey!!", "stop that", "ok ow", "that tickles", "again?!", "i'm a widget, not a button", "go commit something",
-        "poke the plan instead", "i felt that", "rude", "hi :)", "boop received"],
-  sleep: ["zzz… huh?", "five more minutes", "i was dreaming of green CI", "no commits, no pokes", "wha— oh. hi.", "*yawn*"],
-  warm: ["chillin', you?", "nice commit yesterday", "we could ship something", "poke me when it's green"],
-  hot: ["we're cooking!!", "ouch, but proud", "look at us go", "streak's alive", "another one!", "ship ship ship"],
-  mad: ["OUCH.", "STOP POKING ME", "i will log this", "that's it, i'm asleep", "…", "ok. rude.", "do you poke your plants too"],
+        "poke the plan instead", "i felt that", "rude", "hi :)", "boop received", "i have feelings. allegedly.", "what did i do.",
+        "is this a bit?", "do it again, i dare you.", "noted.", "that's assault.", "ok ok i'm up.", "you again.", "mm. no.",
+        "i was mid-thought.", "the belly is not a button.", "careful, i'm load-bearing.", "cute. anyway.", "*squeak*"],
+  sleep: ["zzz… huh?", "five more minutes", "i was dreaming of green CI", "no commits, no pokes", "wha— oh. hi.", "*yawn*",
+          "it's quiet. suspiciously quiet.", "no commits today. i've made peace with it.", "wake me when main moves.", "*rolls over*", "the board is asleep too."],
+  warm: ["chillin', you?", "nice commit yesterday", "we could ship something", "poke me when it's green", "slow day. that's allowed.",
+         "one small step and i'm yours.", "you've got momentum. use it.", "a commit before dinner?", "not bad. not done."],
+  hot: ["we're cooking!!", "ouch, but proud", "look at us go", "streak's alive", "another one!", "ship ship ship", "today we eat.",
+        "who are you and what did you do with you", "main is on fire. the good kind.", "keep going, i'm watching.", "commits for breakfast.", "push it. push it real good."],
+  mad: ["OUCH.", "STOP POKING ME", "i will log this", "that's it, i'm asleep", "…", "ok. rude.", "do you poke your plants too",
+        "i'm filing a ticket.", "this is harassment.", "touch the keyboard instead.", "i know where your TODOs live.", "*stares*", "one more and i'm a ghost on purpose."],
   egg: ["…", "not yet.", "it's warm in here.", "knock knock? rude.", "*muffled*", "tick a step. i'm bored."],
   ghost: ["i saw the light. it was a 404.", "feed me or lose me.", "haunting your TODOs now.", "boo. commit.", "i'm not dead, i'm async."],
   hungry: ["i have not eaten since tuesday.", "is that a step? no? ok.", "one tick. please.", "the plan has steps. tick one.", "starving. dramatically."],
   peckish: ["half a meal. ok.", "more.", "that was an appetizer.", "one more and we're good."],
   stuffed: ["do not perceive me.", "i can't see my feet.", "put the steps down.", "*burp*", "full. so full."],
   scooter: ["the scooter is medical.", "beep beep.", "i earned this.", "don't look at me. look at the board.", "it has a horn."],
+  obese: ["i'm not fat, i'm finished.", "roll me closer.", "the feet are decorative now.", "every step you ticked is in here.", "round is a shape.",
+          "i contain the whole roadmap.", "don't. i'll roll.", "gravity and i have an arrangement."],
 };
 const DROP_LINES = ["oh? a package.", "finally. for me?", "unboxing…", "ok this one's good.", "*gasp*", "say less."];
 const STAGE_WORDS = ["slim", "thicc", "fat", "cooked", "on the scooter", "obese", "a ball"];
@@ -1697,6 +1706,7 @@ function poke(e) {
   const r = Math.random();
   const pool = !v.hatched ? LINES.egg
              : memory.pokes >= 4 ? LINES.mad
+             : v.stage >= 5 && r < 0.5 ? LINES.obese
              : v.stage === 4 && r < 0.5 ? LINES.scooter
              : LINES[v.face] && v.face !== "fed" && r < 0.6 ? LINES[v.face]
              : (LINES[mood] && r < 0.45) ? LINES[mood] : LINES.any;

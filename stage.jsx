@@ -293,7 +293,7 @@ export function mountStage(canvas, model, opts = {}) {
   const HOP_MS = 450;
   const DRAG_K = 0.01;        // rad per px
   const INERTIA_DAMP = 2.5;   // 1/s
-  const DIZZY_W = 9;          // rad/s
+  const DIZZY_W = 20;         // rad/s, and it has to last a few frames: a flick is a spin, not a spin-out
   const DIZZY_MS = 3500;
   const CLICK_MS = 200, CLICK_PX = 4;
 
@@ -688,7 +688,8 @@ export function mountStage(canvas, model, opts = {}) {
 
     // ---- dizzy
     const omega = Math.hypot(dYaw, dPitch) / dt;
-    if (!st.dizzy && omega > DIZZY_W) {
+    st.fastFrames = omega > DIZZY_W ? (st.fastFrames || 0) + 1 : 0;
+    if (!st.dizzy && st.fastFrames >= 5) {
       st.dizzy = true; st.dizzyAt = tNow;
       if (typeof opts.onDizzy === "function") { try { opts.onDizzy(); } catch (err) { console.error(err); } }
     }
