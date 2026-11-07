@@ -1170,8 +1170,13 @@ function say(line, ms) {
 }
 function queueLine(l) { memory.lineQ = l; }
 // ── Things: where they are, and the bits they do on their own ───────────────
-const SLOT_OF = { hat: "head", shades: "eyes", cartier: "eyes", chain: "neck", grill: "mouth", swap: "body", belly: "body" };
-function equipOf(pet) { if (!pet.equip) pet.equip = { hold: null, wear: {}, friend: null }; if (!pet.equip.wear) pet.equip.wear = {}; return pet.equip; }
+const SLOT_OF = { hat: "head", shades: "eyes", cartier: "eyes", chain: "neck", grill: "mouth", swap: "body", belly: "body", wrist: "wrist" };
+function equipOf(pet) {
+  if (!pet.equip) pet.equip = { hold: null, wear: {}, friend: null }; if (!pet.equip.wear) pet.equip.wear = {};
+  const held = pet.equip.hold && ITEMS.find((x) => x.id === pet.equip.hold);   // a thing that became wearable moves from the hand to its slot
+  if (held && held.kind === "wear" && held.proc) { pet.equip.wear[SLOT_OF[held.proc] || "head"] = held.id; pet.equip.hold = null; }
+  return pet.equip;
+}
 function whereIs(pet, id) {   // "pet" | "friend" | null (in the chest)
   const eq = equipOf(pet);
   if (eq.hold === id || Object.values(eq.wear).includes(id)) return "pet";
@@ -1378,17 +1383,20 @@ function Pet({ view, mood, now }) {
                memory.hatchAt && now - memory.hatchAt < 5 ? "hatch" : ""].join(" ");
   const bar = egg ? view.steps / S.cute.hatchAt : 0;   // the bar only counts to the hatch now; after that the wallet shows
   const nm = memory.pet && memory.pet.name, coins = (memory.pet && memory.pet.coins) || 0;
+  const hR = d.hand && d.hand.R, hL = d.hand && d.hand.L;   // [row, col] of each hand: things sit in them
+  const inHand = (h, rows, side) => h ? { marginBottom: Math.max(0, (d.h - h[0] - rows.length / 2) * s) + "px",
+    [side === "R" ? "marginLeft" : "marginRight"]: -((side === "R" ? d.w - h[1] - 1 : h[1]) * s + 2) + "px" } : undefined;
   const tip = egg ? `${nm || "an egg"} · ${S.cute.hatchAt - view.steps} steps to hatch` : `${nm ? nm + " · " : ""}${view.faceWord} · ${view.stageWord} · ${coins} coins · the chart opens the stats`;
   return (
     <span className={"bb-petwrap" + (memory.dropAt && now - memory.dropAt < 60 ? " drop" : "")} onMouseLeave={scheduleHideCloset} title={tip}>
-      {view.snack ? <Px rows={view.snack} s={s} className="bb-snack" key={view.snack.join("")} /> : null}
+      {view.snack ? <span className="bb-snack" style={inHand(hL, view.snack, "L")} key={view.snack.join("")}><Px rows={view.snack} s={s} /></span> : null}
       <span className={cls} onClick={poke}>
         <Px rows={d.body} s={s} />
         {d.pupils.length ? <Px rows={d.pupils} s={s} className="bb-pupils" /> : null}
         <b>z</b>
       </span>
       {view.held ? <span className={"bb-held" + (view.carry && view.friend ? " late" : "") + (view.heldId ? " thing" : "")} key={view.held.join("")}
-          data-item={view.heldId || undefined} onMouseDown={view.heldId ? dragItem : undefined} title={view.heldId ? "drag it off, onto the friend, or into the chest" : undefined}>
+          data-item={view.heldId || undefined} onMouseDown={view.heldId ? dragItem : undefined} title={view.heldId ? "drag it off, onto the friend, or into the chest" : undefined} style={inHand(hR, view.held, "R")}>
           <Px rows={view.held} s={s} /></span> : null}
       <span className="bb-statsbtn" onClick={toggleCloset} onMouseDown={(e) => e.stopPropagation()} title="stats"><Px rows={EXTRA.chart} s={1.5} /></span>
       {egg ? <i className="bb-treat"><i style={{ width: `${Math.round(bar * 100)}%` }} /></i>

@@ -3,7 +3,7 @@
 // Add your own: push an object into ITEMS (treats) or SNACKS (first push of the day) and forget it exists.
 //   kind "hold"  = it sits in the pet's hands beside it
 //   kind "shelf" = it lives in the closet (the chart beside the pet), and beside the pet for a day after it drops
-//   kind "wear"  = painted onto the pet. proc: "chain" | "shades" | "cartier" | "grill" | "belly" | "swap" | "hat"
+//   kind "wear"  = painted onto the pet. proc: "chain" | "shades" | "cartier" | "grill" | "belly" | "swap" | "hat" | "wrist"
 // The pet never tells you what's left in the pool. Neither should you look.
 
 export const PAL = {
@@ -31,7 +31,7 @@ export const ITEMS = [
     "...kkkkkk...", "..kkkkkkkk..", ".kkkkkkkkkk.", "kkkkkkkkkkkk"] },
   { id: "cash", price: 8, name: "rubber band money", kind: "hold", line: "it's monopoly money. don't tell it.", grid: [
     ".kkkkkkkkkkk.", "keeeennEeeeek", "keEEennEEeeek", "keEwwnnwwEeek", "keEEennEEeeek", "keeeennEeeeek", "kEEEEnnEEEEEk", ".kkkkkkkkkkk.", "kkkkkkkkkkkkk", "kEEEEnnEEEEEk", ".kkkkkkkkkkk."] },
-  { id: "rolex", price: 20, name: "the watch", kind: "shelf", line: "the time is: commit.", grid: [
+  { id: "rolex", price: 20, name: "the watch", kind: "wear", proc: "wrist", line: "the time is: commit.", grid: [
     "...kkkkk...", "...kgGgk...", "...kGgGk...", "...kgGgk...", "..kkkkkkk..", ".kgggggggk.", "kggwwwwwggk", "kgwwwkwwwgk", "kgwwwkwwwgk", "kgwwwkkkwgk", "kgwwwwwwwgk", ".kgggggggk.", "..kkkkkkk..", "...kgGgk...", "...kGgGk...", "...kgGgk...", "...kkkkk..."] },
   { id: "bottoms", price: 14, name: "red bottoms", kind: "shelf", line: "red bottoms, green CI.", grid: [
     "..........kkkk", ".........kkYYk", "........kkYYYk", ".......kkYYYYk", "......kkYkkkkk", "....kkxxxxxxxk", ".kkxxxxxxxxxxk", "kxxxxxxxxxxxxk", "krrrrrrrrrrrkk", "..........rrkk", "..........rrkk", "..........rrkk"] },
@@ -153,10 +153,14 @@ export const EXTRA = {
 export function drawPet(o) {
   const stage = o.stage || 0, face = o.face || "fed", wear = o.wear || [];
   const rx = [6, 7.5, 9.5, 11.5, 12][stage], ry = [5, 5.5, 6.5, 7.5, 7.5][stage];
-  const scooter = stage === 4;
-  const W = Math.ceil(rx * 2) + (scooter ? 10 : 4) + 4, H = Math.ceil(ry * 2) + 9 + (scooter ? 4 : 0);
-  const g = blank(W, H), pu = blank(W, H);
+  const scooter = stage === 4, ghost = face === "ghost";
+  // Under the head: a torso (odd width), an arm a column off each side, two legs, shoes. A ghost is just the head.
+  const tw = ghost ? 0 : (Math.round(rx * 1.1) | 1), th = ghost ? 0 : 5 + stage, ll = ghost ? 0 : 3 + (stage >= 2 ? 1 : 0);
+  const W = Math.ceil(rx * 2) + (scooter ? 10 : 4) + 4;
   const cx = Math.floor((Math.ceil(rx * 2) + 4 - 1) / 2) + 2 + (scooter ? 1 : 0), cy = 6 + ry;
+  const base = Math.round(cy + ry);   // the head's last row
+  const H = ghost ? Math.ceil(ry * 2) + 9 : base + th + ll + 3 + (scooter ? 4 : 0);
+  const g = blank(W, H), pu = blank(W, H);
   const inside = (x, y, k = 0) => ((x - cx) / (rx - k)) ** 2 + ((y - cy) / (ry - k)) ** 2 <= 1;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (inside(x, y)) g[y][x] = inside(x, y, 1) ? "s" : "d";
   const topY = Math.round(cy - ry);
@@ -183,20 +187,47 @@ export function drawPet(o) {
   else { put(g, my, mx - 1, "k"); put(g, my, mx, "k"); put(g, my, mx + 1, "k"); put(g, my - 1, mx - 2, "k"); put(g, my - 1, mx + 2, "k"); }
   if (stage >= 2) { const by = Math.round(cy + ry * 0.5); for (let x = Math.round(cx - rx * 0.4); x <= Math.round(cx + rx * 0.4); x++) if (g[by][x] === "s") g[by][x] = "d"; }
   if (stage >= 3) { const by = Math.round(cy + ry * 0.15); for (let x = Math.round(cx - rx * 0.25); x <= Math.round(cx + rx * 0.25); x++) if (g[by][x] === "s") g[by][x] = "d"; }
-  if (scooter) {
-    const base = Math.round(cy + ry), L = Math.round(cx - rx * 0.75), R = Math.round(cx + rx * 0.75);
-    for (let x = L; x <= R; x++) { put(g, base, x, "y"); put(g, base + 1, x, "y"); }
-    for (const X of [L + 1, R - 2]) { put(g, base + 2, X, "k"); put(g, base + 2, X + 1, "k"); put(g, base + 3, X, "k"); put(g, base + 3, X + 1, "k"); put(g, base + 2, X + 1, "Y"); }
-    const hb = R + 3; for (let y = Math.round(cy - 1); y <= base + 1; y++) put(g, y, hb, "y");
-    put(g, Math.round(cy - 2), hb - 1, "k"); put(g, Math.round(cy - 2), hb, "k"); put(g, Math.round(cy - 2), hb + 1, "k");
-    put(g, base + 2, hb, "k"); put(g, base + 3, hb, "k"); put(g, base + 3, hb - 1, "k"); put(g, base + 3, hb + 1, "k");
-  }
-  // arms: out to the side when it's holding something (right = the thing, left = the snack)
+  // the body. hand = [row, col] of each hand, wrist = the pixels a watch sits on (right arm)
   const arms = o.arms || {};
-  const ay = Math.round(cy + ry * 0.15);
-  if (arms.right) { const x0 = Math.round(cx + rx); put(g, ay, x0, "d"); put(g, ay, x0 + 1, "d"); put(g, ay - 1, x0 + 2, "s"); put(g, ay, x0 + 2, "s"); }
-  if (arms.left) { const x0 = Math.round(cx - rx); put(g, ay, x0, "d"); put(g, ay, x0 - 1, "d"); put(g, ay - 1, x0 - 2, "s"); put(g, ay, x0 - 2, "s"); }
-  if (face === "ghost") {   // wavy hem, see-through look comes from CSS
+  const half = (tw - 1) / 2, torsoTop = base + 1, torsoBot = base + th, feetY = torsoBot + ll + 1;
+  const hand = { L: null, R: null }, wrist = [];
+  if (!ghost) {
+    for (let y = torsoTop; y <= torsoBot; y++) for (let x = cx - half; x <= cx + half; x++)
+      g[y][x] = (y === torsoBot || x === cx - half || x === cx + half) ? "d" : "s";
+    for (const side of ["L", "R"]) {
+      const out = side === "L" ? -1 : 1, X = cx + out * (half + 2);   // one empty column between torso and arm
+      put(g, torsoTop, X - out, "d");   // shoulder
+      if (arms[side === "L" ? "left" : "right"]) {   // out to the side, hand at the end
+        const sy = torsoTop + 1;
+        for (let i = 0; i < 3; i++) put(g, sy, X + out * i, "d");
+        put(g, sy, X + out * 3, "s"); put(g, sy - 1, X + out * 3, "s");
+        hand[side] = [sy, X + out * 3];
+        if (side === "R") wrist.push([sy, X + 2], [sy - 1, X + 2]);
+      } else {
+        for (let y = torsoTop; y < torsoBot; y++) put(g, y, X, "d");
+        put(g, torsoBot, X, "s");
+        hand[side] = [torsoBot, X];
+        if (side === "R") wrist.push([torsoBot - 1, X], [torsoBot - 1, X + 1]);
+      }
+    }
+    const lo = Math.max(2, Math.floor(tw / 4) + 1);   // legs: two wide, lo from the middle; shoes one wider
+    for (let y = torsoBot + 1; y < feetY; y++) for (const x of [cx - lo, cx - lo + 1, cx + lo - 1, cx + lo]) put(g, y, x, "d");
+    for (const x of [cx - lo - 1, cx - lo, cx - lo + 1, cx + lo - 1, cx + lo, cx + lo + 1]) put(g, feetY, x, "k");
+  } else {   // a ghost keeps its little stub arms
+    const ay = Math.round(cy + ry * 0.15);
+    if (arms.right) { const x0 = Math.round(cx + rx); put(g, ay, x0, "d"); put(g, ay, x0 + 1, "d"); put(g, ay - 1, x0 + 2, "s"); put(g, ay, x0 + 2, "s"); hand.R = [ay, x0 + 2]; }
+    if (arms.left) { const x0 = Math.round(cx - rx); put(g, ay, x0, "d"); put(g, ay, x0 - 1, "d"); put(g, ay - 1, x0 - 2, "s"); put(g, ay, x0 - 2, "s"); hand.L = [ay, x0 - 2]; }
+  }
+  if (scooter) {
+    const deck = ghost ? base : feetY + 1, L = Math.round(cx - rx * 0.75), R = Math.round(cx + rx * 0.75);
+    for (let x = L; x <= R; x++) { put(g, deck, x, "y"); put(g, deck + 1, x, "y"); }
+    for (const X of [L + 1, R - 2]) { put(g, deck + 2, X, "k"); put(g, deck + 2, X + 1, "k"); put(g, deck + 3, X, "k"); put(g, deck + 3, X + 1, "k"); put(g, deck + 2, X + 1, "Y"); }
+    const hb = R + 3, poleTop = ghost ? Math.round(cy - 1) : torsoTop + 1;
+    for (let y = poleTop; y <= deck + 1; y++) put(g, y, hb, "y");
+    put(g, poleTop - 1, hb - 1, "k"); put(g, poleTop - 1, hb, "k"); put(g, poleTop - 1, hb + 1, "k");
+    put(g, deck + 2, hb, "k"); put(g, deck + 3, hb, "k"); put(g, deck + 3, hb - 1, "k"); put(g, deck + 3, hb + 1, "k");
+  }
+  if (ghost) {   // wavy hem, see-through look comes from CSS
     const by = Math.round(cy + ry);
     for (let x = 0; x < W; x++) { if (g[by][x] !== "." && x % 3 === 1) g[by][x] = "."; if (g[by - 1] && g[by - 1][x] === "d" && x % 3 === 1) g[by - 1][x] = "s"; }
   }
@@ -204,18 +235,27 @@ export function drawPet(o) {
   for (const it of wear) {
     if (it.proc === "swap") for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (it.swap[g[y][x]]) g[y][x] = it.swap[g[y][x]];
     if (it.proc === "chain") {
-      const yy = my + 2;
-      for (let x = eyes[0] - 1; x <= eyes[1] + 2; x++) if (g[yy][x] !== ".") put(g, yy, x, (x % 2) ? "g" : "G");
-      put(g, yy + 1, mx - 1, "g"); put(g, yy + 1, mx + 1, "g"); put(g, yy + 1, mx, "w"); put(g, yy + 2, mx, "g"); put(g, yy + 3, mx, "w");
+      if (ghost) {
+        const yy = my + 2;
+        for (let x = eyes[0] - 1; x <= eyes[1] + 2; x++) if (g[yy][x] !== ".") put(g, yy, x, (x % 2) ? "g" : "G");
+        put(g, yy + 1, mx - 1, "g"); put(g, yy + 1, mx + 1, "g"); put(g, yy + 1, mx, "w"); put(g, yy + 2, mx, "g"); put(g, yy + 3, mx, "w");
+      } else {   // round the neck, pendant on the chest
+        for (let x = cx - half; x <= cx + half; x++) put(g, torsoTop, x, (x % 2) ? "g" : "G");
+        put(g, torsoTop + 1, mx - 1, "g"); put(g, torsoTop + 1, mx + 1, "g"); put(g, torsoTop + 1, mx, "w"); put(g, torsoTop + 2, mx, "g"); put(g, torsoTop + 3, mx, "w");
+      }
     }
     if (it.proc === "shades") { for (let x = eyes[0] - 1; x <= eyes[1] + 2; x++) { put(g, eyeY - 1, x, "k"); put(g, eyeY, x, "k"); put(pu, eyeY - 1, x, "."); put(pu, eyeY, x, "."); } put(g, eyeY - 1, eyes[0], "x"); put(g, eyeY - 1, eyes[1], "x"); }
     if (it.proc === "cartier") { for (const X of eyes) { put(g, eyeY - 2, X, "g"); put(g, eyeY - 2, X + 1, "g"); put(g, eyeY + 1, X, "g"); put(g, eyeY + 1, X + 1, "g"); put(g, eyeY - 1, X - 1, "g"); put(g, eyeY, X - 1, "g"); put(g, eyeY - 1, X + 2, "g"); put(g, eyeY, X + 2, "g"); } put(g, eyeY - 1, mx, "g"); }
     if (it.proc === "grill") for (let x = mx - 1; x <= mx + 1; x++) { put(g, my, x, "g"); if (face === "stuffed") put(g, my + 1, x, "g"); }
-    if (it.proc === "belly") { const by = Math.round(cy + ry * 0.35); put(g, by - 1, mx - 2, "o"); put(g, by - 1, mx + 2, "o"); put(g, by, mx - 1, "o"); put(g, by, mx + 1, "o"); put(g, by + 1, mx, "o"); }
+    if (it.proc === "belly") {   // the V, on the chest
+      const by = ghost ? Math.round(cy + ry * 0.35) : torsoTop + 2;
+      put(g, by - 1, mx - 2, "o"); put(g, by - 1, mx + 2, "o"); put(g, by, mx - 1, "o"); put(g, by, mx + 1, "o"); put(g, by + 1, mx, "o");
+    }
+    if (it.proc === "wrist") wrist.forEach(([y, x], i) => put(g, y, x, i ? "G" : "g"));
     if (it.proc === "hat" && it.grid) stamp(g, it.grid, mx - Math.floor(it.grid[0].length / 2), topY - 2 - it.grid.length + 2);
   }
   if (o.flame) stamp(g, EXTRA.flame, mx - 3, topY - 2 - EXTRA.flame.length + 1);
-  return { body: g.map((r) => r.join("")), pupils: pu.map((r) => r.join("")), w: W, h: H };
+  return { body: g.map((r) => r.join("")), pupils: pu.map((r) => r.join("")), w: W, h: H, hand };
 }
 
 export function drawEgg(steps, hatchAt) {
