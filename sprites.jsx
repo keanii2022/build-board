@@ -3,7 +3,7 @@
 // Add your own: push an object into ITEMS (treats) or SNACKS (first push of the day) and forget it exists.
 //   kind "hold"  = it sits in the pet's hands beside it
 //   kind "shelf" = it lives in the closet (the chart beside the pet), and beside the pet for a day after it drops
-//   kind "wear"  = painted onto the pet. proc: "chain" | "shades" | "cartier" | "grill" | "belly" | "swap" | "hat" | "wrist"
+//   kind "wear"  = painted onto the pet. proc: "chain" | "shades" | "cartier" | "grill" | "belly" | "swap" | "hat" | "wrist" | "lip"
 // The pet never tells you what's left in the pool. Neither should you look.
 
 export const PAL = {
@@ -36,7 +36,7 @@ export const ITEMS = [
   { id: "bottoms", price: 14, name: "red bottoms", kind: "shelf", line: "red bottoms, green CI.", grid: [
     "..........kkkk", ".........kkYYk", "........kkYYYk", ".......kkYYYYk", "......kkYkkkkk", "....kkxxxxxxxk", ".kkxxxxxxxxxxk", "kxxxxxxxxxxxxk", "krrrrrrrrrrrkk", "..........rrkk", "..........rrkk", "..........rrkk"] },
   { id: "bala", price: 6, name: "balaclava", kind: "wear", proc: "swap", swap: { s: "k", d: "x" }, line: "no face, no case." },
-  { id: "blunt", price: 4, name: "medicinal", kind: "hold", line: "for medicinal step purposes.", grid: [
+  { id: "blunt", price: 4, name: "medicinal", kind: "wear", proc: "lip", line: "for medicinal step purposes.", grid: [
     "........Y..", ".......Y...", "........Y..", "kkkkkkkkkk.", "knnnnnnnkor", "kNnNnNnnkor", "kkkkkkkkkk."] },
   { id: "ps5", price: 12, name: "the console", kind: "shelf", line: "it's for the loading screens.", grid: [
     ".kk......kk.", ".kwk....kwk.", ".kwwkkkkwwk.", ".kwwkxxkwwk.", ".kwwkxxkwwk.", ".kwwkbxkwwk.", ".kwwkxxkwwk.", ".kwwkxxkwwk.", ".kwwkxxkwwk.", ".kwwkxxkwwk.", ".kwwkkkkwwk.", ".kwk....kwk.", ".kk......kk.", "kkkkkkkkkkkk"] },
@@ -123,6 +123,31 @@ export const ITEMS = [
     "kkkkkkkkkk", "kYYYYYYYYk", "kYYYYYYYkk", "kYYYYYYYxk", "kYYYYYYYxk", "kYYYYYYYYk", "kkkkkkkkkk", "kYYYYYYYYk", "kYYYYYYYxk", "kYYYYYYYxk", "kYYYYYYYYk", "kkkkkkkkkk"] },
 ];
 
+// ── Friends: a secret collection. Not for sale, no hints; each one shows up when you've done the thing. ──
+// The rules live in index.jsx (FRIEND_RULES). Add a creature here and a rule there.
+export const FRIENDS = [
+  { id: "friend", name: "the first one", line: "it has its own opinions.", grid: [
+    ".tt....tt.", "tttttttttt", "tkttttttkt", "tttttttttt", "ttpttttptt", "tttkkktttt", ".tttttttt.", "..tttttt.."] },
+  { id: "owl", name: "the night owl", line: "it saw the 3am push. it says nothing.", grid: [
+    "u........u", "uu......uu", "uuuuuuuuuu", "uwwuuuuwwu", "uwkuuuuwku", "uuuuggguuu", "uuuuuuuuuu", ".uuuuuuuu.", "..uu..uu.."] },
+  { id: "lark", name: "the early bird", line: "up before the dock loads.", grid: [
+    "...oo.....", "..okoo....", "..oooo.gg.", ".oooooooo.", "ooooooooo.", ".oooooooo.", "..oooooo..", "...o..o...", "...k..k..."] },
+  { id: "ember", name: "the ember", line: "seven days. it's warm now.", grid: [
+    "....r.....", "...ror....", "..rooor...", ".roooggor.", ".rooggoor.", ".roooooor.", "..rooooor.", "...rwrwr..", "....rrr..."] },
+  { id: "closer", name: "the closer", line: "100%. framed. it watched.", grid: [
+    "..gggggg..", ".gGGGGGGg.", "gGwwGGwwGg", "gGkwGGkwGg", "gGGGGGGGGg", "gGGkkkkGGg", ".gGGGGGGg.", "..gggggg..", "..g....g.."] },
+  { id: "courier", name: "the courier", line: "five pushes before lunch. respect.", grid: [
+    "..bbbbbb..", ".bBBBBBBb.", "bBwwBBwwBb", "bBkwBBkwBb", "bBBBBBBBBb", ".bBBkkBBb.", "..bbbbbb..", ".bb....bb.", "bb......bb"] },
+  { id: "weekender", name: "the weekender", line: "saturday and sunday. who hurt you.", grid: [
+    "...eeee...", "..eEEEEe..", ".eEwwEwwEe", ".eEkwEkwEe", ".eEEEEEEEe", ".eEEkkkEEe", "..eEEEEe..", "...eeee...", "..ee..ee.."] },
+  { id: "hoarder", name: "the hoarder", line: "twenty things. it keeps the receipts.", grid: [
+    "..nnnnnn..", ".nNNNNNNn.", "nNwwNNwwNn", "nNkwNNkwNn", "nNNNNNNNNn", "nNNkNNkNNn", ".nNNkkNNn.", "..nnnnnn..", ".nn.nn.nn."] },
+  { id: "spinner", name: "the spinner", line: "ten spins. it's fine. it's fine.", grid: [
+    "..pppppp..", ".pppppppp.", "pwpwppwpwp", "pkwkppkwkp", "pppppppppp", "ppkppppkpp", ".ppkkkkpp.", "..pppppp..", ".p..pp..p."] },
+  { id: "revenant", name: "the revenant", line: "it came back too.", grid: [
+    "..YYYYYY..", ".YwwwwwwY.", "YwxxwwxxwY", "YwxxwwxxwY", "YwwwwwwwwY", "YwwwkwwwwY", ".YwwwwwwY.", "..YwYwYw..", "..Y.Y.Y..."] },
+];
+
 export const SNACKS = [
   { id: "boba", name: "boba", line: "70% sugar, 30% tapioca, 100% deserved.", grid: ["...r..", ".wwrw.", ".wcccw", ".wcccw", ".wcccw", ".wkkcw", ".wkkkw", "..www."] },
   { id: "ramen", name: "desk ramen", line: "ramen at the desk. like a pro.", grid: ["..cYcYc.", ".cccccc.", "rrrrrrrr", ".rrrrrr.", "..rrrr.."] },
@@ -148,15 +173,15 @@ export const EXTRA = {
 };
 
 // ── The pet itself, drawn on the fly from a few numbers ─────────────────────
-// stage 0..4 = fed, thicc, fat, cooked, on the scooter.  face = "fed" | "peckish" | "hungry" | "ghost" | "stuffed"
+// stage 0..6 = slim, thicc, fat, cooked, on the scooter, obese, a ball.  face = "fed" | "peckish" | "hungry" | "ghost" | "stuffed"
 // Returns { body: rows, pupils: rows (same size, only the pupils), anchors } so the eyes can follow the cursor.
 export function drawPet(o) {
   const stage = o.stage || 0, face = o.face || "fed", wear = o.wear || [];
-  const rx = [6, 7.5, 9.5, 11.5, 12][stage], ry = [5, 5.5, 6.5, 7.5, 7.5][stage];
-  const scooter = stage === 4, ghost = face === "ghost";
+  const rx = [6, 7.5, 9.5, 11.5, 12, 13, 14][stage], ry = [5, 5.5, 6.5, 7.5, 7.5, 8, 8.5][stage];
+  const scooter = stage === 4, ghost = face === "ghost", big = Math.max(0, stage - 4) * 3;   // past the scooter the body balloons
   // Under the head: a round chubby body tucked behind the chin, a stubby arm each side, two little feet. A ghost is just the head.
-  const ex = ghost ? 0 : 3;   // extra room each side for the arms
-  const brx = rx + 1, bry = Math.round(ry * 0.85);
+  const ex = ghost ? 0 : 3 + big;   // extra room each side for the arms
+  const brx = rx + 1 + big, bry = Math.round(ry * 0.85) + big;
   const W = Math.ceil(rx * 2) + (scooter ? 10 : 4) + 4 + ex * 2;
   const cx = Math.floor((Math.ceil(rx * 2) + 4 - 1) / 2) + 2 + (scooter ? 1 : 0) + ex, cy = 6 + ry;
   const base = Math.round(cy + ry);   // the head's last row
@@ -255,6 +280,11 @@ export function drawPet(o) {
       put(g, by - 1, mx - 2, "o"); put(g, by - 1, mx + 2, "o"); put(g, by, mx - 1, "o"); put(g, by, mx + 1, "o"); put(g, by + 1, mx, "o");
     }
     if (it.proc === "wrist") wrist.forEach(([y, x], i) => put(g, y, x, i ? "G" : "g"));
+    if (it.proc === "lip") {   // hanging off the right corner of the mouth, sticking well out, lit
+      put(g, my, mx + 2, "n"); put(g, my, mx + 3, "N"); put(g, my, mx + 4, "n"); put(g, my + 1, mx + 5, "n"); put(g, my + 1, mx + 6, "N");
+      put(g, my + 1, mx + 7, "n"); put(g, my + 1, mx + 8, "o"); put(g, my + 1, mx + 9, "r");
+      put(g, my - 1, mx + 9, "Y"); put(g, my - 2, mx + 10, "Y"); put(g, my - 4, mx + 10, "Y"); put(g, my - 5, mx + 9, "Y");
+    }
     if (it.proc === "hat" && it.grid) stamp(g, it.grid, mx - Math.floor(it.grid[0].length / 2), topY - 2 - it.grid.length + 2);
   }
   if (o.flame) stamp(g, EXTRA.flame, mx - 3, topY - 2 - EXTRA.flame.length + 1);

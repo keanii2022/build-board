@@ -12,7 +12,9 @@
 // ╰──────────────────────────────────────────────────────────────────────────╯
 
 import { run, React } from "uebersicht";
-import { PAL, ITEMS, SNACKS, EXTRA, drawPet, drawEgg, shadow, size } from "./sprites.jsx";
+import { PAL, ITEMS, SNACKS, EXTRA, FRIENDS, drawPet, drawEgg, shadow, size } from "./sprites.jsx";
+import { voxelize } from "./voxel.jsx";
+import { loadThree, mountStage, renderThumb } from "./stage.jsx";
 
 const SETTINGS = {
   // ── Where it sits on the desktop ──────────────────────────────────────────
@@ -44,14 +46,14 @@ const SETTINGS = {
   accent: "#5B8DEF",           // eyebrow, "next" label, small links
 
   // ── Panel ─────────────────────────────────────────────────────────────────
-  panel: "rgba(9, 9, 12, 0.78)",       // background of the glass panel
+  panel: "rgba(8, 8, 11, 0.93)",       // background of the glass panel: near black, the room he lives in
   edge: "rgba(255, 255, 255, 0.09)",   // 1px border
   text: "#F4F2EF",
   muted: "rgba(244, 242, 239, 0.55)",
   track: "rgba(255, 255, 255, 0.08)",  // empty part of a bar
   glass: 24,                   // blur behind the panel (0 = none)
   radius: 18,
-  barHeight: 8,
+  barHeight: 3,
 
   // ── Motion ────────────────────────────────────────────────────────────────
   // "activity": the panel breathes faster on days you commit; a project you
@@ -90,12 +92,20 @@ const SETTINGS = {
     fedAt: 2,                  // steps in a day to count as fed. 1 = peckish, 0 = hungry, two days of 0 = ghost
     diesAfterDays: 5,          // days without a single step and it dies: new egg, coins and things gone, a stone in the graveyard. 0 = immortal
     stuffedAt: 5,              // steps in a day that leave it stuffed and sleepy. Keep that up and it gets fat.
-    coins: { step: 1, commit: 1, project: 10 },
+    coins: { step: 3, commit: 2, push: 5, project: 18 },   // what the pet earns: per step ticked, per commit, per push, per project at 100%
+    shopEvery: 5,              // minutes: the shop shows a new shelf this often
+    shopSize: 4,               // things on the shelf at a time
+    shopDeal: true,            // one of them half price
     alive: 0.35,               // each refresh, the chance the pet or the friend does a bit with something you own (0 = never)
     bitSeconds: 75,            // how long a bit lasts   // what the pet earns: per step ticked, per commit, per project at 100%. Spend them in the shop (hover the pet)
     hatchAt: 5,                // steps from the egg until it hatches
     snackHours: 2,             // first push of the day: how long it holds the snack
     petScale: 2,               // pixel size of the pet. 2 = about 48px, 3 = big
+    stage: true,               // him in 3D: his pixels as little cubes, turning, breathing, blinking, drag to spin
+    stageStyle: "side",        // "side": he lives in a column beside the list. "popup": click the corner pet and a card opens
+    stageWidth: 0.46,          // the column's share of the panel (0.46 = almost half), or a px number
+    stageHeight: 250,          // the 3D view's height in px (shrinks to fit the screen)
+    stageDepth: 7,             // how thick he is in cubes
     treatSound: ["Pop", "Pop", "Hero"],   // bought something
     hatchSound: ["Purr", "Hero"],
     snackSound: "Bottle",
@@ -116,6 +126,7 @@ const SETTINGS = {
                                // "dropdown": opens under the project (can run off the bottom of the screen).
 
   // ── Clicks ────────────────────────────────────────────────────────────────
+  lock: { idleMinutes: 10, onOpen: true, reset: false },   // a 4-digit pin (set on first ask, kept hashed in this widget's own storage): asked after idleMinutes without a touch (0 = never), and before a project opens. reset: true forgets it on the next refresh
   clickOpens: "claude",       // "claude" = a new Claude Code session in that folder. "editor" = the app below. "" = nothing.
   openWith: "Visual Studio Code",
   boardUrl: "https://github.com/keanii2022",   // opens when you click the title (your GitHub)
@@ -159,7 +170,7 @@ const SPECTRUM = `linear-gradient(90deg, ${S.spectrum.join(", ")})`;
 const memory = { done: {}, bumpAt: {}, seen: null, arrivedAt: {}, pos: null, dragging: false, dragEndAt: 0,
                  full: {}, doneAt: {}, pushSeen: null, soundAt: 0, scale: 0, width: 0,
                  pokes: 0, pokeAt: 0, lastLine: "", sayT: null, pokedT: null, height: 0, stepsById: {}, flyT: null,
-                 pet: null, petSaved: "", view: null, dropAt: 0, hatchAt: 0, lineQ: "", closetT: null };
+                 pet: null, petSaved: "", view: null, dropAt: 0, hatchAt: 0, lineQ: "", closetT: null, pin: null, locked: false, lastActive: Date.now() };
 
 // ── Sounds (macOS system sounds through afplay) ─────────────────────────────
 const SOUNDS = "/System/Library/Sounds/";
@@ -225,6 +236,49 @@ function ago(ts, now) {
 }
 
 function sh(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
+// ── The pin: a numpad over the glass (the desktop takes no keyboard, so it's clicks) ────────
+const PIN_KEY = "build-board.pin";
+async function pinHash(p) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("bb:" + p)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
+function pinStored() { try { return localStorage.getItem(PIN_KEY) || ""; } catch (e) { return ""; } }
+function askPin(reason, then, cancellable) { memory.pin = { mode: pinStored() ? "enter" : "set", reason, then, entry: "", first: "", err: false, cancellable }; redraw(); }
+function pinPress(d) {
+  const P = memory.pin; if (!P) return;
+  P.err = false; P.entry += d;
+  if (P.entry.length < 4) { redraw(); return; }
+  const code = P.entry; P.entry = "";
+  if (P.mode === "set") { P.first = code; P.mode = "confirm"; redraw(); return; }
+  if (P.mode === "confirm") {
+    if (code !== P.first) { P.mode = "set"; P.first = ""; P.err = true; redraw(); return; }
+    pinHash(code).then((h) => { try { localStorage.setItem(PIN_KEY, h); } catch (e) {} pinDone(); });
+    return;
+  }
+  pinHash(code).then((h) => { if (h === pinStored()) pinDone(); else { P.err = true; play(S.cute.petMadSound, undefined, 1.2); redraw(); } });
+}
+function pinDone() { const P = memory.pin; memory.pin = null; memory.locked = false; memory.lastActive = Date.now(); play(S.cute.clickSound); if (P && P.then) P.then(); redraw(); }
+function pinCancel() { if (memory.pin && memory.pin.cancellable) { memory.pin = null; redraw(); } }
+function touch() { memory.lastActive = Date.now(); }
+function checkIdle() {
+  const m = S.lock && S.lock.idleMinutes;
+  if (!m || memory.locked || memory.pin) return;
+  if (Date.now() - (memory.lastActive || 0) > m * 60000) { memory.locked = true; askPin("locked", null, false); }
+}
+function guarded(fn, what) { if (S.lock && S.lock.onOpen) askPin(what ? `open ${what}` : "open", fn, true); else fn(); }
+function LockPad() {
+  const P = memory.pin; if (!P) return null;
+  const title = P.mode === "set" ? "set a 4-digit pin" : P.mode === "confirm" ? "once more" : P.reason === "locked" ? "locked" : `pin to ${P.reason}`;
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", P.cancellable ? "✕" : ""];
+  const press = (k) => { if (k === "⌫") { P.entry = P.entry.slice(0, -1); P.err = false; redraw(); } else if (k === "✕") pinCancel(); else if (k) pinPress(k); };
+  return (
+    <div className={"bb-lock" + (P.err ? " err" : "")} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onMouseMove={(e) => e.stopPropagation()}>
+      <div className="bb-lock-card">
+        <div className="t">{title}</div>
+        <div className="dots">{[0, 1, 2, 3].map((i) => <i key={i} className={i < P.entry.length ? "on" : ""} />)}</div>
+        <div className="pad">{keys.map((k, i) => <span key={i} className={k ? "" : "gap"} onClick={() => press(k)}>{k}</span>)}</div>
+        <div className="e">{P.err ? (P.mode === "set" ? "didn't match. again." : "no.") : "\u00a0"}</div>
+      </div>
+    </div>
+  );
+}
 function openPath(p) {
   if (!S.clickOpens || !p) return;
   play(S.cute.clickSound);
@@ -313,9 +367,142 @@ function hideProject(id) {   // × in the chest: gone from the widget until you 
 function unhideProject(id) { const L = layout(); L.hidden = (L.hidden || []).filter((x) => x !== id); saveLayout(); play(S.cute.storeSound); redraw(); }
 function toggleChest(e) {
   if (e) e.stopPropagation();
-  const L = layout(); L.open = !L.open; saveLayout(); play(S.cute.chestSound, undefined, L.open ? 0.9 : 0.7); redraw();
+  const L = layout(); L.open = !L.open; saveLayout(); play(S.cute.chestSound, undefined, L.open ? 0.9 : 0.7);
+  if (L.open) closeStage(false);
+  redraw();
 }
-function closeChest() { if (Date.now() - memory.dragEndAt < 400) return; const L = layout(); if (L.open) { L.open = false; saveLayout(); redraw(); } }
+// ── The stage: the pet in 3D, over the board ────────────────────────────────
+function toggleStage(e) {
+  if (e) e.stopPropagation();
+  if (S.cute.stageStyle === "side") return;   // he's already out
+  if (memory.stageOpen) { closeStage(true); return; }
+  const L = layout(); if (L.open) { L.open = false; saveLayout(); }
+  memory.stageOpen = true; redraw();
+}
+function closeStage(draw) { if (S.cute.stageStyle === "side" || !memory.stageOpen) return; memory.stageOpen = false; if (memory.stageCtrl) { memory.stageCtrl.dispose(); memory.stageCtrl = null; } memory.stageKey = ""; if (draw) redraw(); }
+function petModel() {   // the same drawing the corner pet uses, as cubes
+  const v = memory.view, petEl = document.querySelector(".bb-pet");
+  if (!v || !v.hatched) return null;
+  const d = drawPet({ stage: v.stage, face: v.face, wear: v.wear, bags: v.bags, flame: v.flame, sleepy: !!(petEl && petEl.classList.contains("sleep")),
+                      arms: { right: !!v.held, left: !!v.snack } });
+  const key = d.body.join("|") + "/" + d.pupils.join("|");
+  if (memory.stageModel && memory.stageModel.key === key) return memory.stageModel;
+  const body = voxelize(d.body, { depth: S.cute.stageDepth || 7 });
+  const skin = new Set([PAL.s, PAL.d, PAL.w, PAL.k, PAL.p, PAL.x, PAL.y, PAL.Y]);   // him, his eyes and mouth, the scooter
+  (v.wear || []).forEach((it) => { if (it.swap) Object.values(it.swap).forEach((l) => skin.add(PAL[l])); });   // a hoodie recolours the skin, it is not a thing on him
+  const tops = new Map();
+  body.voxels.forEach((vx) => { const k = vx.x + "," + vx.y; if (!tops.has(k) || tops.get(k).z < vx.z) tops.set(k, vx); });
+  tops.forEach((vx) => { if (!skin.has(vx.c)) for (let i = 1; i <= 2; i++) body.voxels.push({ x: vx.x, y: vx.y, z: vx.z + i, c: vx.c }); });
+  const front = new Map();   // the pupils sit on the face, one cube proud of the eye whites, so they can slide about
+  body.voxels.forEach((v) => { const k = v.x + "," + v.y; if (!front.has(k) || front.get(k) < v.z) front.set(k, v.z); });
+  const pupils = { voxels: [], w: body.w, h: body.h, d: 1 };
+  d.pupils.forEach((row, y) => [...row].forEach((ch, x) => { if (PAL[ch]) pupils.voxels.push({ x, y, z: (front.has(x + "," + y) ? front.get(x + "," + y) : 0) + 1, c: PAL[ch] }); }));
+  memory.stageModel = { key, body, pupils };
+  return memory.stageModel;
+}
+function placeStage() {   // after every draw: mount him in the side column, or lay the popup card over the board
+  const bb = document.querySelector(".bb");
+  if (!bb) return;
+  if (S.cute.stageStyle === "side") {
+    const col = bb.querySelector(".bb-stagecol"), canvas = col && col.querySelector(".bb-stage");
+    if (!canvas || !memory.view) { if (memory.stageCtrl) { memory.stageCtrl.dispose(); memory.stageCtrl = null; memory.stageKey = ""; } return; }
+    memory.stageOpen = true;
+    mountStageIn(canvas, col);
+    return;
+  }
+  const fly = bb.querySelector(".bb-stagecard");
+  if (!fly) return;
+  if (!memory.stageOpen || !memory.view) { fly.classList.remove("show"); return; }
+  const z = loadScale(), br = bb.getBoundingClientRect(), grab = bb.querySelector(".bb-grab");
+  const top = grab ? (grab.getBoundingClientRect().bottom - br.top) / z + 6 : 16;
+  fly.classList.remove("in", "left", "right"); fly.classList.add("over", "show");
+  fly.style.marginLeft = ""; fly.style.marginRight = ""; fly.style.top = Math.round(top) + "px";
+  const bar = bb.querySelector(".bb-chestbar"), floor = bar ? (bar.getBoundingClientRect().top - br.top) / z - 8 : br.height / z - 16;
+  const head = fly.querySelector(".bb-fly-head"), headH = head ? head.getBoundingClientRect().height / z : 36;
+  const things = fly.querySelector(".bb-stage-things"), thingsH = things ? things.getBoundingClientRect().height / z + 8 : 0;
+  const canvas = fly.querySelector(".bb-stage");
+  canvas.style.height = Math.max(120, Math.min(S.cute.stageHeight || 250, floor - top - headH - thingsH - 34)) + "px";
+  mountStageIn(canvas, fly);
+}
+function mountStageIn(canvas, host) {   // first time: load three and build him; after: swap the model when he changes
+  const m = petModel();
+  if (!m) return;
+  if (!memory.stageCtrl) {
+    if (memory.stageLoading) return;
+    memory.stageLoading = true;
+    loadThree().then(() => {
+      memory.stageLoading = false;
+      if (!memory.stageOpen || memory.stageCtrl) return;
+      memory.stageCtrl = mountStage(canvas, m.body, { pupils: m.pupils, accent: S.spectrum[1] || S.accent, roll: memory.view.stage >= 5,
+        onDizzy: () => { say(DIZZY_LINES[Math.floor(Math.random() * DIZZY_LINES.length)], 2600); play(S.cute.petMadSound, undefined, 0.6);
+          if (memory.pet) { memory.pet.dizzy = (memory.pet.dizzy || 0) + 1; savePet(); checkFriends(memory.pet, memory.data, memory.view, Math.floor(Date.now() / 1000)); } } });
+      memory.stageKey = m.key;
+      redraw();   // the column turns "live": the sprite steps aside
+    }).catch((e) => { memory.stageLoading = false; const el = host.querySelector(".bb-stage-err"); if (el) el.textContent = "3D didn't load: " + String((e && e.message) || e); });
+  } else if (m.key !== memory.stageKey) { memory.stageKey = m.key; memory.stageCtrl.setModel(m.body, m.pupils); memory.stageCtrl.setRoll(memory.view.stage >= 5); }
+  const fkey = friendsOf(memory.pet).map((f) => f.id).join(",");
+  if (memory.stageCtrl && memory.stageCtrl.setFriends && fkey !== memory.friendsKey) {
+    memory.friendsKey = fkey;
+    memory.stageCtrl.setFriends(friendsOf(memory.pet).map((f) => { const d = FRIENDS.find((x) => x.id === f.id); return d ? { id: d.id, model: voxelize(d.grid, { depth: 5 }) } : null; }).filter(Boolean));
+  }
+}
+function stageLook(e) {
+  if (!memory.stageCtrl) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  memory.stageCtrl.look(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2);   // the stage wants +1 at the top
+}
+const DIZZY_LINES = ["the room is spinning.", "ok. ok. put me down.", "i see three of you.", "that was the whole step budget.", "why."];
+function stagePoke(e) {
+  e.stopPropagation();
+  if (memory.stageCtrl && memory.stageCtrl.wasDrag()) return;   // a spin is not a poke
+  const petEl = document.querySelector(".bb-pet");
+  if (petEl) poke({ currentTarget: petEl, stopPropagation() {}, preventDefault() {} });
+  if (memory.stageCtrl) memory.stageCtrl.poke();
+}
+function Thumb({ item }) {   // a reward as a little 3D object (rendered once, then cached)
+  memory.thumbs = memory.thumbs || {};
+  const src = memory.thumbs[item.id];
+  if (!src && !memory.thumbs["_" + item.id]) {
+    memory.thumbs["_" + item.id] = true;
+    const flat = item.kind === "wear" && item.proc === "hat";
+    loadThree().then(() => renderThumb(voxelize(item.grid, flat ? { round: false, depth: 2 } : { depth: 4 }), 88))
+      .then((url) => { memory.thumbs[item.id] = url; redraw(); }).catch(() => {});
+  }
+  const on = memory.pet ? whereIs(memory.pet, item.id) : null;
+  return src ? <img src={src} className={on ? "" : "off"} data-item={item.id} onMouseDown={dragItem} onClick={(e) => { e.stopPropagation(); toggleThing(item.id); }}
+                    title={`${item.name} · ${item.line} · click: ${on ? "take it off" : "put it on"}`} alt={item.name} />
+             : <span style={{ width: 44, height: 44 }} />;
+}
+function StageCol({ view, pet, mood, now }) {   // he lives here, beside the list
+  const nm = pet && pet.name, hatched = view && view.hatched;
+  const owned = pet && hatched ? pet.drops.map((id) => ITEMS.find((it) => it.id === id)).filter((it) => it && it.grid && it.id !== "friend") : [];
+  return (
+    <div className={"bb-stagecol" + (memory.stageCtrl ? " live" : "") + (owned.length ? " has-things" : "")} onClick={(e) => e.stopPropagation()}>
+      <div className="bb-stage-top"><b>{nm || (hatched ? "the pet" : "an egg")}</b><span>{hatched ? `${view.faceWord} · ${view.stageWord}` : ""}</span></div>
+      <Pet view={view} mood={mood} now={now} />
+      {hatched ? <div className="bb-stage-box"><canvas className="bb-stage" onMouseMove={stageLook} onClick={stagePoke} title="poke · drag to spin" /></div> : null}
+      <div className="bb-stage-err" />
+      {owned.length ? <div className="bb-stage-things">{owned.map((it) => <Thumb key={it.id} item={it} />)}</div> : null}
+    </div>
+  );
+}
+function StageCard({ view, pet }) {
+  if (S.cute.stageStyle === "side") return null;
+  if (!S.cute.pet || S.cute.stage === false) return null;
+  const nm = pet && pet.name;
+  const owned = pet ? pet.drops.map((id) => ITEMS.find((it) => it.id === id)).filter((it) => it && it.grid) : [];
+  return (
+    <div className="bb-fly bb-stagecard" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="bb-fly-card">
+        <div className="bb-fly-head"><b>{nm || "the pet"}</b><span>{view && view.hatched ? `${view.faceWord} · ${view.stageWord}` : ""}<i className="x" onClick={toggleStage} title="close">×</i></span></div>
+        <canvas className="bb-stage" onMouseMove={stageLook} onClick={stagePoke} title="poke · drag to spin" />
+        <div className="bb-stage-err" />
+        {owned.length ? <div className="bb-stage-things">{owned.map((it) => <Thumb key={it.id} item={it} />)}</div> : null}
+      </div>
+    </div>
+  );
+}
+function closeChest() { if (Date.now() - memory.dragEndAt < 400) return; closeStage(true); const L = layout(); if (L.open) { L.open = false; saveLayout(); redraw(); } }
 // Pixel icons for projects (10×10). Each project gets its own; pick one by name in SETTINGS.icons.
 const ICONS = {
   rocket:     ["....kk....", "...kwwk...", "...kwwk...", "..kwbbwk..", "..kwbbwk..", ".kkwwwwkk.", ".krkwwkrk.", ".krkkkkrk.", "...kook...", "....oo...."],
@@ -388,16 +575,19 @@ function dragIcon(e, what) {
   icon.classList.add("lifting");
 
   bb.classList.add("bb-dnd"); if (item) bb.classList.add("bb-dnd-thing"); hideFly(); memory.dragging = true;
-  const chest = bb.querySelector(".bb-chestbar"), list = bb.querySelector(".bb-list"), petEl = bb.querySelector(".bb-petwrap"), buddy = bb.querySelector(".bb-buddy");
+  const chest = bb.querySelector(".bb-chestbar"), list = bb.querySelector(".bb-list"), petEl = bb.querySelector(".bb-petwrap"), buddy = bb.querySelector(".bb-buddy"), stageEl = bb.querySelector(".bb-stage");
   const inside = (el, ev, pad = 0) => { if (!el) return false; const r = el.getBoundingClientRect(); return ev.clientX >= r.left - pad && ev.clientX <= r.right + pad && ev.clientY >= r.top - pad && ev.clientY <= r.bottom + pad; };
   let target = null, index = null;
+  const sx = e.clientX, sy = e.clientY; let moved = false;
   const move = (ev) => {
+    if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+    moved = true;
     const wr = wrap.getBoundingClientRect();
     ghost.style.left = (ev.clientX - wr.left) + "px"; ghost.style.top = (ev.clientY - wr.top) + "px";
     bb.querySelectorAll(".ins-before, .ins-after").forEach((el) => el.classList.remove("ins-before", "ins-after"));
     target = null; index = null;
     if (item) {   // a thing: onto the pet, the friend, or back in the chest
-      if (inside(petEl, ev, 6)) target = "pet"; else if (inside(buddy, ev, 10)) target = "friend"; else if (inside(chest, ev)) target = "chest";
+      if (inside(petEl, ev, 6) || inside(stageEl, ev)) target = "pet"; else if (inside(buddy, ev, 10)) target = "friend"; else if (inside(chest, ev)) target = "chest";
       if (petEl) petEl.classList.toggle("over", target === "pet");
       if (buddy) buddy.classList.toggle("over", target === "friend");
       if (chest) chest.classList.toggle("over", target === "chest");
@@ -417,7 +607,7 @@ function dragIcon(e, what) {
     document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
     ghost.remove(); icon.classList.remove("lifting"); bb.classList.remove("bb-dnd", "bb-dnd-thing"); [chest, petEl, buddy].forEach((el) => el && el.classList.remove("over"));
     bb.querySelectorAll(".ins-before, .ins-after").forEach((el) => el.classList.remove("ins-before", "ins-after"));
-    memory.dragging = false; memory.dragEndAt = Date.now();
+    memory.dragging = false; if (moved) memory.dragEndAt = Date.now();
     if (item) {
       if (target && memory.pet) { equip(memory.pet, id, target); play(target === "chest" ? S.cute.storeSound : S.cute.clickSound); if (memory.bit && memory.bit.id === id) memory.bit = null; }
       return;
@@ -572,7 +762,7 @@ function styles(busy) {
   const breathHi = S.pulse === "activity" && busy ? 0.75 : 0.55;
   return `
     @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-    .bb { font-family: ${S.font}; color: ${S.text}; font-size: 12px; line-height: 1.4;
+    .bb { font-family: ${S.font}; color: ${S.text}; font-size: 11px; line-height: 1.4;
       background: ${S.panel};
       -webkit-backdrop-filter: blur(${S.glass}px) saturate(1.3); backdrop-filter: blur(${S.glass}px) saturate(1.3);
       border-radius: ${S.radius}px; padding: 16px 18px 14px; position: relative;
@@ -629,28 +819,29 @@ function styles(busy) {
       border: 1px solid rgba(255,255,255,0.32); box-shadow: inset -1px -1px 2px rgba(255,255,255,0.22);
       animation: bb-rise var(--t) linear infinite; animation-delay: var(--dl); opacity: 0; }
     .bb-grip:hover, .bb-dragging .bb-grip { opacity: 1 !important; }
-    .bb-eyebrow { font-size: 9px; font-weight: 600; letter-spacing: 0.16em; color: ${S.accent}; text-transform: uppercase; }
+    .bb-eyebrow { font-size: 8px; font-weight: 600; letter-spacing: 0.16em; color: ${S.accent}; text-transform: uppercase; }
     .bb-head { display: flex; align-items: flex-end; justify-content: space-between; margin: 2px 0 8px; }
-    .bb-title { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; cursor: ${S.boardUrl ? "pointer" : "default"}; }
+    .bb-title { font-size: 15px; font-weight: 600; letter-spacing: -0.015em; cursor: ${S.boardUrl ? "pointer" : "default"}; }
     .bb-title:hover { opacity: 0.8; }
     .bb-swap { display: inline-block; margin-left: 8px; margin-right: auto; font-size: 12px; color: ${S.muted}; opacity: 0; cursor: pointer; vertical-align: 2px;
       transition: opacity .2s, transform .2s cubic-bezier(.3,1.5,.4,1); }
     .bb:hover .bb-swap { opacity: 0.5; }
     .bb-swap:hover { opacity: 1 !important; transform: scale(1.25); }
     .bb-title .g { background: ${SPECTRUM}; -webkit-background-clip: text; background-clip: text; color: transparent; }
-    .bb-stamp { color: ${S.muted}; font-size: 10px; }
-    .bb-today { color: ${S.muted}; font-size: 10.5px; margin: 0 0 8px; }
+    .bb-stamp { color: ${S.muted}; font-size: 9px; }
+    .bb-today { color: ${S.muted}; font-size: 9.5px; margin: 0 0 8px; }
     .bb-today b { color: ${S.text}; font-weight: 600; }
     .bb-rule { height: 1px; background: ${SPECTRUM}; opacity: 0.7; margin: 0 0 12px; }
-    .bb-list { display: grid; gap: 13px; }
-    .bb-proj { display: grid; gap: 5px; cursor: ${S.clickOpens ? "pointer" : "default"}; border-radius: 8px; }
-    ${S.rowTint > 0 ? `.bb-proj { padding: 7px 10px; margin: 0 -10px;
-      background: linear-gradient(90deg, color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 100)}%, transparent), color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 35)}%, transparent) 55%, transparent);
-      box-shadow: inset 2px 0 0 color-mix(in srgb, var(--tint) 65%, transparent); }
-    .bb-proj:hover { background: linear-gradient(90deg, color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 160)}%, transparent), color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 50)}%, transparent) 55%, transparent); }` : ""}
+    .bb-list { display: grid; gap: 5px; container-type: inline-size; }
+    .bb-track { container-type: inline-size; }
+    .bb-proj { display: grid; gap: 5px; cursor: ${S.clickOpens ? "pointer" : "default"}; border-radius: 8px; padding: 7px 10px 8px; min-width: 0;
+      box-shadow: inset 0 0 0 1px ${S.edge}; transition: background .15s, box-shadow .15s; }
+    ${S.rowTint > 0 ? `.bb-proj { background: color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 22)}%, rgba(0,0,0,0.45)); }   /* a shade darker than the panel, the faintest hint of the icon's colour; the edge stays neutral */
+    .bb-proj:hover { background: color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 50)}%, rgba(0,0,0,0.45)); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.13); }` : `.bb-proj { background: rgba(0,0,0,0.45); } .bb-proj:hover { background: rgba(0,0,0,0.3); }`}
+    @container (max-width: 330px) { .bb-proj .bb-new, .bb-proj .bb-spark { display: none; } .bb-proj .bb-sub .r { gap: 5px; } }   /* a narrow list drops the extras instead of spilling */
     .bb-proj.arrived { animation: bb-arrive 1.2s cubic-bezier(.2,.8,.2,1) both; }
-    .bb-new { font-size: 8px; font-weight: 700; letter-spacing: 0.14em; padding: 2px 6px; border-radius: 999px;
-      background: ${SPECTRUM}; color: #fff; margin-right: 6px; }
+    .bb-new { font-size: 7.5px; font-weight: 700; letter-spacing: 0.14em; padding: 1px 6px; border-radius: 999px; flex: none;
+      border: 1px solid rgba(255,255,255,0.14); background: ${SPECTRUM}; -webkit-background-clip: text; background-clip: text; color: transparent; }
     .bb-parked { margin-top: 12px; padding-top: 9px; border-top: 1px solid ${S.edge}; color: ${S.muted}; font-size: 10px; }
     .bb-parked b { font-weight: 600; font-size: 9px; letter-spacing: 0.12em; margin-right: 6px; color: ${S.muted}; }
     .bb-track { margin-top: 14px; padding-top: 10px; border-top: 1px solid ${S.edge}; }
@@ -660,26 +851,26 @@ function styles(busy) {
     .bb-steps.ticks .m { cursor: pointer; border-radius: 5px; text-align: center; transition: background .15s, transform .15s, color .15s; }
     .bb-steps.ticks .m:hover { background: rgba(255,255,255,0.14); color: ${S.text}; transform: scale(1.3); }
     .bb-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .bb-dot { width: 6px; height: 6px; border-radius: 50%; background: ${S.muted}; opacity: 0.45; flex: none; }
+    .bb-dot { width: 4px; height: 4px; border-radius: 50%; background: ${S.muted}; opacity: 0.35; flex: none; }
     .bb-proj.warm .bb-dot, .bb-proj.hot .bb-dot { background: ${S.spectrum[0]}; opacity: 1; }
     .bb-proj.warm .bb-dot { animation: ${off ? "none" : `bb-ping ${slow}s ease-out infinite`}; }
     .bb-proj.hot .bb-dot { background: ${S.spectrum[3] || S.spectrum[0]}; animation: ${off ? "none" : `bb-ping ${quick}s ease-out infinite`}; }
-    .bb-name { font-weight: 600; font-size: 13px; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-    .bb-pill { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 999px;
-      border: 1px solid rgba(255,255,255,0.22); color: ${S.text}; white-space: nowrap; }
+    .bb-name { font-weight: 500; font-size: 11px; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+    .bb-pill { font-size: 7.5px; font-weight: 600; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 999px; flex: none; max-width: 46%;
+      border: 1px solid rgba(255,255,255,0.12); color: ${S.text}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; font-variant-numeric: tabular-nums; }
     .bb-proj.full .bb-pill { border-color: transparent; background: ${SPECTRUM}; color: #fff; }
-    .bb-proj.asleep .bb-pill { color: ${S.muted}; border-color: rgba(255,255,255,0.14); }
+    .bb-proj.asleep .bb-pill { color: ${S.muted}; border-color: transparent; padding-right: 0; opacity: .8; }   /* a status, not a badge */
     .bb-bar { height: ${S.barHeight}px; border-radius: 999px; background: ${S.track}; overflow: hidden; }
     .bb-bar i { display: block; height: 100%; width: var(--w); min-width: ${S.barHeight}px; border-radius: 999px;
       background: ${SPECTRUM}; background-size: calc(100% / var(--f)) 100%;
       transition: width 1s cubic-bezier(.2,.8,.2,1); }
     .bb-proj.full .bb-bar i { animation: bb-sheen 3s linear infinite; background-size: 200% 100%;
       background-image: linear-gradient(90deg, ${S.spectrum.join(", ")}, ${S.spectrum[0]}); }
-    .bb-sub { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: ${S.muted}; font-size: 10.5px; min-width: 0; }
+    .bb-sub { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: ${S.muted}; font-size: 9px; min-width: 0; }
     .bb-sub .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .bb-sub .r { white-space: nowrap; display: flex; align-items: center; gap: 7px; }
-    .bb-sub b { color: ${S.accent}; font-weight: 600; font-size: 9px; letter-spacing: 0.12em; margin-right: 5px; }
-    .bb-spark { display: flex; align-items: flex-end; gap: 2px; height: 10px; }
+    .bb-sub .r { white-space: nowrap; display: flex; align-items: center; gap: 7px; flex: none; }
+    .bb-sub b { color: ${S.accent}; font-weight: 600; font-size: 7.5px; letter-spacing: 0.08em; margin-right: 4px; opacity: .9; }
+    .bb-spark { display: flex; align-items: flex-end; gap: 2px; height: 8px; }
     .bb-spark i { display: block; width: 3px; border-radius: 1px; background: ${S.muted}; opacity: 0.35; height: var(--h); min-height: 1px; }
     .bb-spark i.on { background: ${SPECTRUM}; background-size: 42px 100%; opacity: 0.95; }
     .bb-spark { position: relative; cursor: default; padding: 4px 0; margin: -4px 0; transition: transform .2s cubic-bezier(.2,.8,.2,1); transform-origin: right bottom; }
@@ -696,6 +887,22 @@ function styles(busy) {
     .bb-bump { color: ${S.spectrum[3] || S.accent}; font-weight: 600; animation: bb-fade 4s ease-out forwards; }
     .bb-push { color: ${S.text}; font-weight: 600; }
     .bb-err { color: ${S.muted}; }
+    .bb-lock { position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; border-radius: ${S.radius}px; cursor: default;
+      background: rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+    .bb-lock-card { text-align: center; }
+    .bb-lock .t { font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: ${S.muted}; margin-bottom: 14px; }
+    .bb-lock .dots { display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; }
+    .bb-lock .dots i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.35); }
+    .bb-lock .dots i.on { background: ${S.text}; border-color: ${S.text}; }
+    .bb-lock .pad { display: grid; grid-template-columns: repeat(3, 44px); gap: 8px; }
+    .bb-lock .pad span { height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; color: ${S.text};
+      background: rgba(255,255,255,0.07); cursor: pointer; user-select: none; -webkit-user-select: none; transition: background .12s, transform .12s; }
+    .bb-lock .pad span:hover { background: rgba(255,255,255,0.14); }
+    .bb-lock .pad span:active { transform: scale(.94); }
+    .bb-lock .pad span.gap { visibility: hidden; }
+    .bb-lock .e { margin-top: 10px; font-size: 10px; color: ${S.spectrum[3] || S.accent}; min-height: 14px; }
+    .bb-lock.err .dots { animation: bb-shake .4s ease; }
+    @keyframes bb-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
     .bb-proj { position: relative; }
     ${S.stepsStyle === "flyout" ? `
     .bb-fly { position: absolute; top: 0; z-index: 5; width: ${S.flyWidth || 300}px; visibility: hidden; opacity: 0;
@@ -782,10 +989,13 @@ function styles(busy) {
     .bb .sec .wallet { color: ${S.spectrum[1] || S.accent}; font-weight: 700; }
     .bb .it.buy { cursor: pointer; border-radius: 8px; padding: 4px 2px; margin: -4px -2px; transition: background .15s, transform .15s; }
     .bb .it.buy:hover { background: rgba(255,255,255,0.06); transform: translateY(-2px); }
+    .bb .it.buy.deal .pr { color: ${S.spectrum[3] || S.accent}; }
+    .bb .it.buy.deal .pr em { font-style: normal; font-size: 7.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-left: 3px; opacity: .85; }
     .bb .it .pr { font-style: normal; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; color: ${S.muted};
       border: 1px solid rgba(255,255,255,0.14); }
     .bb .it .pr.ok { color: #fff; border-color: transparent; background: ${SPECTRUM}; background-size: 200% 100%; }
-    .bb-icon { display: inline-flex; line-height: 0; cursor: grab; flex: none; border-radius: 4px; transition: transform .2s cubic-bezier(.3,1.5,.4,1); }
+    .bb-icon { display: inline-flex; line-height: 0; cursor: grab; flex: none; border-radius: 4px; opacity: .85; transition: transform .2s cubic-bezier(.3,1.5,.4,1), opacity .2s; }
+    .bb-proj:hover .bb-icon { opacity: 1; }
     .bb-icon:hover { transform: scale(1.2); }
     .bb-dnd, .bb-dnd * { cursor: grabbing !important; }
     .bb-dnd-thing .bb-chestcard { opacity: 0.08; pointer-events: none; transition: opacity .15s; }
@@ -807,10 +1017,40 @@ function styles(busy) {
     .bb-chestbtn:hover { transform: translateY(-3px) scale(1.08); }
     .bb-chestbtn.open { filter: drop-shadow(0 0 12px rgba(244,198,79,0.85)); animation: none; }
     @keyframes bb-glow { 0%, 100% { filter: drop-shadow(0 0 5px rgba(244,198,79,0.35)); } 50% { filter: drop-shadow(0 0 12px rgba(244,198,79,0.75)); } }
-    .bb-chest-sum { font-size: 10px; color: ${S.muted}; display: inline-flex; align-items: center; gap: 4px; }
-    .bb-chest-sum b { font-weight: 600; font-size: 9px; letter-spacing: 0.12em; }
+    .bb-chest-sum { font-size: 9px; color: ${S.muted}; display: inline-flex; align-items: center; gap: 4px; }
+    .bb-chest-sum b { font-weight: 600; font-size: 8px; letter-spacing: 0.12em; }
     .bb-chest-sum .wallet, .bb .sec .wallet, .bb-fly-head .wallet { display: inline-flex; align-items: center; gap: 4px; color: ${S.spectrum[1] || S.accent}; font-weight: 700; margin-left: 6px; }
     .bb-chestcard { width: 340px; }
+    .bb-stagecard .bb-fly-card { padding: 10px 12px 12px; }
+    .bb-stagecard .bb-fly-head .x { cursor: pointer; margin-left: 8px; font-style: normal; font-size: 14px; line-height: 1; opacity: .7; }
+    .bb-stagecard .bb-fly-head .x:hover { opacity: 1; }
+    .bb-stage { display: block; width: 100%; height: ${S.cute.stageHeight || 250}px; cursor: pointer; border-radius: 12px;
+      background: radial-gradient(ellipse at 50% 72%, rgba(255,255,255,0.06), transparent 70%); }
+    .bb-stage-err { color: ${S.muted}; font-size: 10px; }
+    .bb-split { display: flex; gap: 14px; min-height: 0; flex: 1; align-items: stretch; }
+    .bb-split.plain { display: contents; }
+    .bb-side .bb-body { flex: 1; min-width: 0; margin-right: 0; padding-right: 10px; }
+    .bb-stagecol { position: relative; flex: 0 0 ${(S.cute.stageWidth || 0.46) < 1 ? Math.round((S.cute.stageWidth || 0.46) * 100) + "%" : S.cute.stageWidth + "px"}; max-width: 60%; min-height: 260px; margin-bottom: 6px; border-radius: ${S.radius - 4}px;
+      background: radial-gradient(ellipse at 50% 72%, rgba(255,255,255,0.06), transparent 70%), rgba(0, 0, 0, 0.35); box-shadow: inset 0 0 0 1px ${S.edge}; }   /* a shade deeper than the panel, with a little light on the floor */
+    .bb-stagecol .bb-stage-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 9px 12px 0; font-size: 10px; color: ${S.muted}; position: relative; z-index: 2; }
+    .bb-stagecol .bb-stage-top b { color: ${S.text}; font-size: 11px; font-weight: 600; }
+    .bb-stagecol .bb-stage-box { position: absolute; left: 0; right: 0; top: 34px; bottom: 10px; }   /* a canvas won't stretch between top and bottom on its own, a box will */
+    .bb-stagecol.has-things .bb-stage-box { bottom: 58px; }
+    .bb-stagecol .bb-stage { display: block; width: 100% !important; height: 100% !important; border-radius: 0; background: none; }   /* !important: the renderer writes its first measurement inline */
+    .bb-stagecol .bb-stage-things { position: absolute; left: 8px; right: 8px; bottom: 8px; margin: 0; justify-content: center; }
+    .bb-stagecol .bb-stage-things img { width: 40px; height: 40px; }
+    .bb-stagecol .bb-stage-err { position: absolute; left: 12px; right: 12px; top: 50%; text-align: center; }
+    .bb-stagecol .bb-petwrap { position: absolute; right: 10px; top: 30px; z-index: 3; margin: 0; padding: 0; }
+    .bb-stagecol.live .bb-petwrap .bb-pet, .bb-stagecol.live .bb-petwrap .bb-held, .bb-stagecol.live .bb-petwrap .bb-snack { display: none; }   /* the 3D one is him now; the sprite stays for the egg, and if 3D can't load */
+    .bb-stage-things { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .bb-stage-things img { width: 44px; height: 44px; border-radius: 10px; background: rgba(255,255,255,0.04); }
+    .bb-stage-things img:hover { background: rgba(255,255,255,0.09); }
+    .bb .it.friend { cursor: pointer; }
+    .bb .it.friend img { width: 44px; height: 44px; border-radius: 10px; }
+    .bb .it.friend:hover img { transform: translateY(-2px); }
+    .bb-stage-things img { cursor: pointer; transition: opacity .2s, transform .2s; }
+    .bb-stage-things img.off { opacity: .38; filter: saturate(.4); }   /* in the chest, not on him */
+    .bb-stage-things img:hover { transform: translateY(-2px); }
     .bb-chestcard .bb-chest-body { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; padding-right: 2px; }
     .bb-chestcard .bb-chest-body::-webkit-scrollbar { display: none; }
     .bb-stored { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-radius: 6px; }
@@ -943,7 +1183,7 @@ function Steps({ steps }) {   // the "dropdown" style; "flyout" uses the shared 
 // On hover it's filled with that project's steps and placed so it never leaves
 // the screen: side with room, capped to the screen, scrolled to the current step.
 function esc(t) { return String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
-function hideFly() { document.querySelectorAll(".bb-fly:not(.bb-chestcard)").forEach((f) => f.classList.remove("show")); clearTimeout(memory.closetT); }
+function hideFly() { document.querySelectorAll(".bb-fly:not(.bb-chestcard):not(.bb-stagecard)").forEach((f) => f.classList.remove("show")); clearTimeout(memory.closetT); }
 function scheduleHide() { clearTimeout(memory.flyT); clearTimeout(memory.closetT); memory.flyT = setTimeout(hideFly, 160); }
 function scheduleHideCloset() { clearTimeout(memory.flyT); clearTimeout(memory.closetT); memory.flyT = setTimeout(hideFly, 700); }   // time to cross to the card
 function closetShowing() { const c = document.querySelector(".bb-closet"); return !!(c && c.classList.contains("show")); }
@@ -1124,7 +1364,7 @@ const LINES = {
   scooter: ["the scooter is medical.", "beep beep.", "i earned this.", "don't look at me. look at the board.", "it has a horn."],
 };
 const DROP_LINES = ["oh? a package.", "finally. for me?", "unboxing…", "ok this one's good.", "*gasp*", "say less."];
-const STAGE_WORDS = ["slim", "thicc", "fat", "cooked", "on the scooter"];
+const STAGE_WORDS = ["slim", "thicc", "fat", "cooked", "on the scooter", "obese", "a ball"];
 const FACE_WORDS = { fed: "fed", peckish: "peckish", hungry: "hungry", ghost: "ghost", stuffed: "stuffed" };
 
 // ── The pet's memory lives in .pet.json next to the widget ──────────────────
@@ -1152,7 +1392,7 @@ function petDies(pet, all, now) {   // permadeath: a stone in the graveyard, the
 function newPet(all) {
   const seen = {}; all.forEach((p) => { if (p.ok) seen[p.id] = p.done || 0; });
   return { born: dayKey(), plaque: all.reduce((n, p) => n + (p.done || 0), 0), seen, days: {}, steps: 0,
-           drops: [], trophies: [], pushDays: {}, snack: null, late: "", shinyUntil: 0, coins: 0, log: [], graveyard: [] };
+           drops: [], trophies: [], pushDays: {}, snack: null, late: "", shinyUntil: 0, coins: 0, log: [], graveyard: [], friends: [], dizzy: 0 };
 }
 function savePet() {
   if (!memory.pet) return;
@@ -1170,12 +1410,73 @@ function say(line, ms) {
 }
 function queueLine(l) { memory.lineQ = l; }
 // ── Things: where they are, and the bits they do on their own ───────────────
-const SLOT_OF = { hat: "head", shades: "eyes", cartier: "eyes", chain: "neck", grill: "mouth", swap: "body", belly: "body", wrist: "wrist" };
+const SLOT_OF = { hat: "head", shades: "eyes", cartier: "eyes", chain: "neck", grill: "mouth", swap: "body", belly: "body", wrist: "wrist", lip: "lip" };
 function equipOf(pet) {
   if (!pet.equip) pet.equip = { hold: null, wear: {}, friend: null }; if (!pet.equip.wear) pet.equip.wear = {};
   const held = pet.equip.hold && ITEMS.find((x) => x.id === pet.equip.hold);   // a thing that became wearable moves from the hand to its slot
   if (held && held.kind === "wear" && held.proc) { pet.equip.wear[SLOT_OF[held.proc] || "head"] = held.id; pet.equip.hold = null; }
+  if (!pet.equip.dressed) {   // once: these used to be hand things; if they're owned and sitting in the chest, they go on
+    for (const id of ["rolex", "blunt"]) {
+      const it = ITEMS.find((x) => x.id === id), slot = it && SLOT_OF[it.proc];
+      if (it && slot && pet.drops.includes(id) && !pet.equip.wear[slot] && !Object.values(pet.equip.wear).includes(id)) pet.equip.wear[slot] = id;
+    }
+    pet.equip.dressed = true;
+  }
   return pet.equip;
+}
+function toggleThing(id) {   // click on a thing: off him into the chest, or out of the chest onto him
+  const pet = memory.pet; if (!pet || id === "friend" || Date.now() - memory.dragEndAt < 400) return;
+  const on = whereIs(pet, id);
+  equip(pet, id, on ? "chest" : "pet");
+  play(on ? S.cute.storeSound : S.cute.clickSound);
+  const it = ITEMS.find((x) => x.id === id);
+  say(on ? `${it ? it.name : "that"}: off.` : `${it ? it.name : "that"}: on.`, 1600);
+}
+// ── Friends: secret unlocks. Each rule reads what the pet already remembers. No hints anywhere. ──
+const FRIEND_RULES = {
+  friend: ({ pet }) => pet.drops.includes("friend") || (pet.friends || []).length === 0 && pet.steps >= 1,   // the first one comes with the first step
+  owl: ({ pet }) => !!pet.nightPush,
+  lark: ({ pet }) => !!pet.earlyPush,
+  ember: ({ data }) => data && data.streak >= 7,
+  closer: ({ pet }) => pet.trophies.length >= 1,
+  courier: ({ pet }) => Object.values(pet.pushDays || {}).some((n) => n >= 5),
+  weekender: ({ pet, now }) => { const d = new Date(now * 1000), dow = d.getDay(); const sat = now - ((dow + 1) % 7) * 86400, sun = sat + 86400; return (pet.days[dayKey(sat)] || 0) > 0 && (pet.days[dayKey(sun)] || 0) > 0; },
+  hoarder: ({ pet }) => pet.drops.length >= 20,
+  spinner: ({ pet }) => (pet.dizzy || 0) >= 10,
+  revenant: ({ pet, view }) => !!pet.wasGhost && view && view.face === "fed",
+};
+function friendsOf(pet) { return (pet && pet.friends) || []; }
+function checkFriends(pet, data, view, now) {   // after every view: anyone new?
+  if (!pet || !view || !view.hatched) return;
+  if (!pet.friends) pet.friends = [];
+  if (view.face === "ghost") pet.wasGhost = true;
+  const ctx = { pet, data, view, now };
+  for (const f of FRIENDS) {
+    if (pet.friends.some((x) => x.id === f.id)) continue;
+    let ok = false; try { ok = !!FRIEND_RULES[f.id](ctx); } catch (e) { ok = false; }
+    if (!ok) continue;
+    pet.friends.push({ id: f.id, at: now });
+    if (f.id !== "friend" || pet.friends.length > 1) { queueLine(`${f.name} showed up. ${f.line}`); play(S.cute.hatchSound); memory.partyAt = Date.now(); }
+    savePet();
+  }
+}
+function pokeFriend(id) {
+  const f = FRIENDS.find((x) => x.id === id); if (!f) return;
+  if (memory.stageCtrl && memory.stageCtrl.pokeFriend) memory.stageCtrl.pokeFriend(id);
+  say(f.line, 2400); play(S.cute.petSound, undefined, 1.3);
+}
+function FriendCard({ f }) {   // one earned friend in the chest: its 3D self, click and it hops
+  memory.thumbs = memory.thumbs || {};
+  const key = "f:" + f.id, src = memory.thumbs[key];
+  if (!src && !memory.thumbs["_" + key]) {
+    memory.thumbs["_" + key] = true;
+    loadThree().then(() => renderThumb(voxelize(f.grid, { depth: 5 }), 88)).then((url) => { memory.thumbs[key] = url; redraw(); }).catch(() => {});
+  }
+  return (
+    <div className="it friend" title={f.line} onClick={(e) => { e.stopPropagation(); pokeFriend(f.id); }}>
+      <div className="sp">{src ? <img src={src} alt={f.name} /> : <span style={{ width: 44, height: 44, display: "inline-block" }} />}</div><b>{f.name}</b>
+    </div>
+  );
 }
 function whereIs(pet, id) {   // "pet" | "friend" | null (in the chest)
   const eq = equipOf(pet);
@@ -1210,14 +1511,14 @@ const TRICKS = {
   cat: { kind: "friend", line: "the cat's on the keyboard again." },
   katana: { kind: "hold", trick: "slash", line: "one PR, four PRs." },
   cup: { kind: "hold", line: "*sips*" },
-  blunt: { kind: "hold", line: "medicinal." },
+  blunt: { kind: "wear", line: "medicinal." },
   lamp: { kind: "shelf", trick: "mood", line: "mood." },
 };
 function pickBit(pet, now) {   // maybe start a bit: pet or friend does something with a thing you own
   if (memory.bit && now < memory.bit.until) return;
   memory.bit = null;
   if (!S.cute.alive || Math.random() >= S.cute.alive) return;
-  const owned = pet.drops.map((id) => ITEMS.find((x) => x.id === id)).filter((it) => it && it.id !== "friend" && it.grid);
+  const owned = pet.drops.map((id) => ITEMS.find((x) => x.id === id)).filter((it) => it && it.id !== "friend" && it.grid && it.kind !== "wear");   // he picks things up on his own, he doesn't put on what you took off
   if (!owned.length) return;
   const it = owned[Math.floor(Math.random() * owned.length)];
   const t = TRICKS[it.id] || {};
@@ -1258,13 +1559,14 @@ function petTick(data, all, now) {   // once per refresh: credit new steps, drop
   if (pet.steps >= S.cute.hatchAt && S.cute.diesAfterDays && idleDays(pet, now) >= S.cute.diesAfterDays) petDies(pet, all, now);
   else if (pet.steps >= S.cute.hatchAt) pickBit(pet, now);
   savePet();
-  memory.view = petView(memory.pet, data, now);
+  memory.view = petView(memory.pet, data, now); checkFriends(memory.pet, data, memory.view, now);
   return memory.view;
 }
 function petPush(now) {   // a push just happened
   const pet = memory.pet; if (!pet) return;
   const today = dayKey(), h = new Date().getHours();
   if (h < 5) pet.late = today;
+  if (h < 5) pet.nightPush = true; else if (h < 7) pet.earlyPush = true;
   if (!pet.pushDays[today]) {
     const sn = SNACKS[Math.floor(Math.random() * SNACKS.length)];
     pet.snack = { id: sn.id, at: now }; play(S.cute.snackSound); queueLine(sn.line);
@@ -1280,12 +1582,24 @@ function petTrophy(name, now) {   // a project just hit 100%
   savePet();
 }
 function earn(pet, n, line) { if (n > 0) { pet.coins = (pet.coins || 0) + n; if (line) queueLine(line); } }
+// The shelf: a few things at a time, reshuffled every shopEvery minutes (seeded by the clock, so every refresh agrees), one of them half price.
+function shopNow(pet, now = Date.now()) {
+  const every = Math.max(1, S.cute.shopEvery || 5) * 60000, slot = Math.floor(now / every);
+  const pool = ITEMS.filter((it) => !pet.drops.includes(it.id) && it.id !== "friend");   // friends aren't for sale
+  let seed = (slot * 2654435761) >>> 0;
+  const rnd = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const n = Math.max(1, S.cute.shopSize || 4), dealAt = S.cute.shopDeal === false ? -1 : slot % n;
+  const items = pool.slice(0, n).map((it, i) => (i === dealAt ? { ...it, price: Math.ceil(it.price / 2), was: it.price, deal: true } : { ...it, deal: false }));
+  return { items, left: pool.length, until: (slot + 1) * every };
+}
 function buyItem(id) {   // click in the shop (inside the chest)
   const pet = memory.pet, it = ITEMS.find((x) => x.id === id);
   if (!pet || !it || pet.drops.includes(id)) return;
-  if ((pet.coins || 0) < it.price) { play(S.cute.petMadSound, undefined, 1.3); say(`${it.price - (pet.coins || 0)} more coins.`, 1800); return; }
+  const offer = shopNow(pet).items.find((x) => x.id === id), price = offer ? offer.price : it.price;
+  if ((pet.coins || 0) < price) { play(S.cute.petMadSound, undefined, 1.3); say(`${price - (pet.coins || 0)} more coins.`, 1800); return; }
   const now = Math.floor(Date.now() / 1000);
-  pet.coins -= it.price;
+  pet.coins -= price;
   pet.drops.push(id); pet.log.unshift({ id, at: now }); pet.log = pet.log.slice(0, 40);
   memory.dropAt = now; memory.unbox = { id, at: Date.now() }; play(S.cute.treatSound);
   const eq = equipOf(pet);
@@ -1294,6 +1608,7 @@ function buyItem(id) {   // click in the shop (inside the chest)
   setTimeout(() => { if (memory.view) say(it.line, 2600); }, 3600);
   savePet();
   if (memory.data) memory.view = petView(pet, memory.data, now);
+  checkFriends(pet, memory.data, memory.view, now);
   redraw();
 }
 function petView(pet, data, now) {
@@ -1308,7 +1623,7 @@ function petView(pet, data, now) {
   let weight = 0;
   for (let i = age; i >= 1; i--) weight = Math.max(0, weight + (pet.days[dayKey(now - i * 86400)] || 0) - S.cute.fedAt);
   weight += t;
-  const stage = weight >= 14 ? 4 : weight >= 10 ? 3 : weight >= 6 ? 2 : weight >= 3 ? 1 : 0;
+  const stage = weight >= 30 ? 6 : weight >= 21 ? 5 : weight >= 14 ? 4 : weight >= 10 ? 3 : weight >= 6 ? 2 : weight >= 3 ? 1 : 0;
   const eq = equipOf(pet), own = (id) => id && pet.drops.includes(id) ? ITEMS.find((x) => x.id === id) : null;
   const bit = memory.bit && now < memory.bit.until ? memory.bit : null;
   const slots = {};
@@ -1390,7 +1705,7 @@ function Pet({ view, mood, now }) {
   return (
     <span className={"bb-petwrap" + (memory.dropAt && now - memory.dropAt < 60 ? " drop" : "")} onMouseLeave={scheduleHideCloset} title={tip}>
       {view.snack ? <span className="bb-snack" style={inHand(hL, view.snack, "L")} key={view.snack.join("")}><Px rows={view.snack} s={s} /></span> : null}
-      <span className={cls} onClick={poke}>
+      <span className={cls} onClick={(e) => { poke(e); if (S.cute.stage !== false) toggleStage(); }}>
         <Px rows={d.body} s={s} />
         {d.pupils.length ? <Px rows={d.pupils} s={s} className="bb-pupils" /> : null}
         <b>z</b>
@@ -1467,10 +1782,10 @@ function Project({ data, now, lastPush, index }) {
 
   return (
     <div className={cls} style={{ "--w": `${pct}%`, "--f": Math.max(frac, 0.02), "--i": index, "--tint": tintOf(cfg.id) }}
-         onClick={() => { if (Date.now() - memory.dragEndAt > 300) openPath(cfg.path); }} onMouseEnter={enterProj} onMouseLeave={scheduleHide} data-i={index} data-id={cfg.id} title={cfg.path ? `open ${cfg.path}` : ""}>
+         onClick={() => { if (Date.now() - memory.dragEndAt > 300 && S.clickOpens && cfg.path) guarded(() => openPath(cfg.path), cfg.name); }} onMouseEnter={enterProj} onMouseLeave={scheduleHide} data-i={index} data-id={cfg.id} title={cfg.path ? `open ${cfg.path}` : ""}>
       <div className="bb-row">
         <span className="bb-dot" />
-        <span className="bb-icon" onMouseDown={dragIcon} onClick={(e) => e.stopPropagation()} title="drag me: into the chest, or up and down the list"><Px rows={iconOf(cfg.id)} s={2} /></span>
+        <span className="bb-icon" onMouseDown={dragIcon} onClick={(e) => e.stopPropagation()} title="drag me: into the chest, or up and down the list"><Px rows={iconOf(cfg.id)} s={1.5} /></span>
         <span className="bb-name">{cfg.name}</span>
         {isNew ? <span className="bb-new">NEW</span> : null}
         <span className="bb-pill" onMouseEnter={enterPill}>{pill}</span>
@@ -1508,8 +1823,10 @@ function Chest({ stored, pet, view }) {   // the chest itself: a glowing button 
 }
 function ChestCard({ stored, hidden, pet, view }) {   // the window the chest opens: trophy case, stored projects, shop, collection
   const L = layout(), open = !!L.open, coins = (pet && pet.coins) || 0, hatched = view && view.hatched;
-  const owned = pet ? pet.drops.map((id) => ITEMS.find((it) => it.id === id)).filter(Boolean).reverse() : [];
-  const shop = pet ? ITEMS.filter((it) => !pet.drops.includes(it.id)).sort((a, b) => a.price - b.price || a.name.localeCompare(b.name)) : [];
+  const owned = pet ? pet.drops.map((id) => ITEMS.find((it) => it.id === id)).filter((it) => it && it.id !== "friend").reverse() : [];
+  const friends = friendsOf(pet).map((f) => FRIENDS.find((x) => x.id === f.id)).filter(Boolean).reverse();
+  const shelf = pet ? shopNow(pet) : { items: [], left: 0, until: 0 }, shop = shelf.items;
+  const mins = Math.max(1, Math.ceil((shelf.until - Date.now()) / 60000));
   const done = stored.filter((p) => p.ok && p.total > 0 && p.done >= p.total), kept = stored.filter((p) => !done.includes(p));
   const name = (p) => S.names[p.id] || p.name;
   const sprite = (it) => <Px rows={it.proc && !it.grid ? wearPreview(it) : it.grid} s={3} />;
@@ -1529,15 +1846,19 @@ function ChestCard({ stored, hidden, pet, view }) {   // the window the chest op
           <div className="bb-chest-body">
             {pet && hatched ? (
               <div>
-                <div className="sec"><span>collected</span><span>{owned.length} / {ITEMS.length}</span></div>
+                <div className="sec"><span>friends</span><span>{friends.length} / {FRIENDS.length}</span></div>
+                {friends.length ? <div className="items big">{friends.map((f) => <FriendCard key={f.id} f={f} />)}</div>
+                  : <div className="empty">no one yet. they find you.</div>}
+                <div className="sec"><span>collected</span><span>{owned.length} / {ITEMS.length - 1}</span></div>
                 {owned.length ? (
                   <div className="items big">{owned.map((it) => { const w = whereIs(pet, it.id); return (
                     <div className={"it thing" + (w ? " " + w : "")} key={it.id} data-item={it.id} onMouseDown={it.id === "friend" ? undefined : dragItem}
-                         title={it.id === "friend" ? it.line : `${it.line} · drag onto your pet, the friend, or the chest`}>
+                         onClick={it.id === "friend" ? undefined : (e) => { e.stopPropagation(); toggleThing(it.id); }}
+                         title={it.id === "friend" ? it.line : `${it.line} · click: ${w ? "take it off" : "put it on"} · or drag it onto your pet, the friend, or the chest`}>
                       <div className="sp">{sprite(it)}</div><b>{it.name}</b><i className="where">{it.id === "friend" ? "wandering" : w === "pet" ? "on the pet" : w === "friend" ? "with the friend" : "in the chest"}</i>
                     </div>); })}
                   </div>
-                ) : <div className="empty">nothing yet. {S.cute.coins.step} coin per step, {S.cute.coins.commit} per commit, {S.cute.coins.project} per finished project.</div>}
+                ) : <div className="empty">nothing yet. {S.cute.coins.step} coins per step, {S.cute.coins.commit} per commit, {S.cute.coins.push} per push, {S.cute.coins.project} per finished project.</div>}
               </div>
             ) : null}
             {pet && pet.graveyard && pet.graveyard.length ? (
@@ -1576,12 +1897,12 @@ function ChestCard({ stored, hidden, pet, view }) {   // the window the chest op
             ) : null}
             {pet ? (
               <div>
-                <div className="sec"><span>shop</span><span>{shop.length} left</span></div>
+                <div className="sec"><span>shop</span><span>{shelf.left} to find · new shelf in {mins} min</span></div>
                 {!hatched ? <div className="empty">the shop opens when the egg hatches.</div>
                   : shop.length ? (
                     <div className="items">{shop.map((it) => (
-                      <div className={"it buy"} key={it.id} title={`${it.line} · ${it.price} coins`} onClick={() => buyItem(it.id)}>
-                        <div className="sp">{sprite(it)}</div><b>{it.name}</b><i className={"pr" + (coins >= it.price ? " ok" : "")}>{it.price}</i>
+                      <div className={"it buy" + (it.deal ? " deal" : "")} key={it.id} title={`${it.line} · ${it.price} coins${it.deal ? ` (was ${it.was})` : ""}`} onClick={() => buyItem(it.id)}>
+                        <div className="sp">{sprite(it)}</div><b>{it.name}</b><i className={"pr" + (coins >= it.price ? " ok" : "")}>{it.price}{it.deal ? <em>sale</em> : null}</i>
                       </div>))}
                     </div>
                   ) : <div className="empty">sold out. you own it all.</div>}
@@ -1641,11 +1962,15 @@ function renderBoard({ output, error }) {
     }
     memory.seen = new Set(ids);
     const pushAt = data.lastPush ? data.lastPush.at : null;
-    if (memory.pushSeen !== null && pushAt && pushAt !== memory.pushSeen && now - pushAt < 90) { play(S.cute.pushSound); petPush(now); memory.partyAt = Date.now(); }
+    if (memory.pushSeen !== null && pushAt && pushAt !== memory.pushSeen && now - pushAt < 90) {
+      play(S.cute.pushSound); petPush(now); memory.partyAt = Date.now();
+      if (memory.pet && S.cute.coins.push) earn(memory.pet, S.cute.coins.push, `+${S.cute.coins.push} coins for pushing`);
+    }
     memory.pushSeen = pushAt;
   }
   const anyWarm = all.some((p) => p.commitAt && now - p.commitAt < S.activeHours * 3600);
   const mood = today > 0 ? "hot" : anyWarm ? "warm" : "sleep";
+  const side = !!(S.cute.pet && S.cute.stage !== false && S.cute.stageStyle === "side");
   const L = layout();
   if (!L.board && data) {   // first run with a chest: what was on the board stays on the board, the rest goes in the chest
     const parkLine = S.parkAfterDays * 86400;
@@ -1664,11 +1989,11 @@ function renderBoard({ output, error }) {
   const party = S.cute.pushParty && memory.partyAt && Date.now() - memory.partyAt < 4000;   // just pushed: the whole panel celebrates
 
   return (
-    <div className={"bb" + (view && view.friend ? " bb-floor" : "") + (party ? " bb-party" : "") + " bb-fixed" + (view && view.trick ? " bb-trick-" + view.trick : "") + (memory.deathAt && Date.now() - memory.deathAt < 60000 ? " bb-mourn" : "")} ref={mountPos} onMouseMove={followEyes} onMouseLeave={restEyes} onWheel={wheelScale} onClick={closeChest}>
+    <div className={"bb" + (view && view.friend && !side ? " bb-floor" : "") + (party ? " bb-party" : "") + " bb-fixed" + (side ? " bb-side" : "") + (view && view.trick ? " bb-trick-" + view.trick : "") + (memory.deathAt && Date.now() - memory.deathAt < 60000 ? " bb-mourn" : "")} ref={mountPos} onMouseMove={(e) => { touch(); followEyes(e); }} onMouseLeave={restEyes} onWheel={wheelScale} onClick={closeChest}>
       {party ? <Confetti key={memory.partyAt} /> : null}
       <style>{styles(today > 0)}</style>
       <Bubbles />
-      {view && view.friend ? (
+      {view && view.friend && !side ? (
         <span className={"bb-buddy" + (view.carry ? " deliver" : "") + (view.friendItem ? " holding" : "")} title={view.carry ? "delivery." : "a friend. not your pet."}>
           {view.carry ? <Px rows={view.carry} s={S.cute.petScale || 2} className="bb-carry" /> : null}
           {view.friendItem ? <span className="bb-carry thing" data-item={view.friendItem.id} onMouseDown={dragItem} title={`${view.friendItem.name} · drag it off`}><Px rows={view.friendItem.grid} s={S.cute.petScale || 2} /></span> : null}
@@ -1681,7 +2006,7 @@ function renderBoard({ output, error }) {
           <Title />
           {memory.screens && memory.screens.length > 1 && S.screen !== "all"
             ? <span className="bb-swap" onClick={swapScreen} onMouseDown={(e) => e.stopPropagation()} title="send to the other display">⇄</span> : null}
-          <span className="bb-stamp">{data ? ago(data.generatedAt, now) : "…"}<Pet view={view} mood={mood} now={now} /></span>
+          <span className="bb-stamp">{data ? ago(data.generatedAt, now) : "…"}{side ? null : <Pet view={view} mood={mood} now={now} />}</span>
         </div>
         {S.showToday && data ? (
           <div className="bb-today">
@@ -1692,6 +2017,7 @@ function renderBoard({ output, error }) {
         ) : null}
         <div className="bb-rule" />
       </div>
+      <div className={"bb-split" + (side ? "" : " plain")}>
       <div className="bb-body" onScroll={hideFly}>
         {error || parseError ? (
           <div className="bb-err">board.py didn't answer: {String(error || parseError)}</div>
@@ -1711,6 +2037,8 @@ function renderBoard({ output, error }) {
           </div>
         )}
       </div>
+      {side ? <StageCol view={view} pet={memory.pet} mood={mood} now={now} /> : null}
+      </div>
       {S.cute.chest !== false && !(error || parseError) ? <Chest stored={stored} pet={memory.pet} view={view} /> : null}
       {S.hoverSteps && S.stepsStyle === "flyout" ? (
         <div className="bb-fly right" onMouseEnter={keepFly} onMouseLeave={scheduleHide} onClick={(e) => e.stopPropagation()}>
@@ -1729,6 +2057,8 @@ function renderBoard({ output, error }) {
         </div>
       ) : null}
       {S.cute.chest !== false ? <ChestCard stored={stored} hidden={hidden} pet={memory.pet} view={view} /> : null}
+      <StageCard view={view} pet={memory.pet} />
+      <LockPad />
       {S.cute.sounds ? (
         <span className={"bb-mute lv" + level()} onClick={toggleSound} title={levelTitle()}>
           <Px rows={SPK_OFF} s={2} className="lv0" /><Px rows={SPK_1} s={2} className="lv1" /><Px rows={SPK_ON} s={2} className="lv2" /><Px rows={SPK_3} s={2} className="lv3" />
@@ -1744,8 +2074,13 @@ function renderBoard({ output, error }) {
 }
 // A stateful root so the widget can redraw itself at once (a buy, a drag, a tick) instead of waiting for the next refresh.
 class Board extends React.Component {
-  componentDidMount() { memory.redraw = () => this.forceUpdate(); placeChest(); }
-  componentDidUpdate() { placeChest(); }
+  componentDidMount() {
+    memory.redraw = () => this.forceUpdate(); placeChest(); placeStage();
+    if (S.lock && S.lock.reset) { try { localStorage.removeItem(PIN_KEY); } catch (e) {} }
+    if (!memory.idleT) memory.idleT = setInterval(checkIdle, 15000);
+    if (!memory.keyT) { memory.keyT = true; window.addEventListener("keydown", (e) => { if (!memory.pin) return; if (/^[0-9]$/.test(e.key)) pinPress(e.key); else if (e.key === "Backspace") { memory.pin.entry = memory.pin.entry.slice(0, -1); redraw(); } else if (e.key === "Escape") pinCancel(); }); }
+  }
+  componentDidUpdate() { placeChest(); placeStage(); }
   componentWillUnmount() { memory.redraw = null; }
   render() { return renderBoard(this.props); }
 }

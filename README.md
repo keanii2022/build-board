@@ -76,6 +76,6 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python3 server.py
 
 ## Files
 
-`index.jsx` the widget · `sprites.jsx` pixel art and shop · `board.py` reads the plans, prints JSON · `server.py` MCP · `pre-push.hook`
+`index.jsx` the widget · `sprites.jsx` pixel art, shop, friends · `voxel.jsx` pixels to cubes · `stage.jsx` the pet in 3D (three.js, vendored in `vendor/`, MIT) · `board.py` reads the plans, prints JSON · `server.py` MCP · `pre-push.hook`
 
 MIT.
