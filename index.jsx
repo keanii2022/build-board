@@ -405,6 +405,11 @@ function petModel() {   // the same drawing the corner pet uses, as cubes
   const tops = new Map();
   body.voxels.forEach((vx) => { const k = vx.x + "," + vx.y; if (!tops.has(k) || tops.get(k).z < vx.z) tops.set(k, vx); });
   tops.forEach((vx) => { if (!skin.has(vx.c)) for (let i = 1; i <= 2; i++) body.voxels.push({ x: vx.x, y: vx.y, z: vx.z + i, c: vx.c }); });
+  if (v.face === "ghost") {   // pale: every colour pulled most of the way to bone white
+    const pale = (hex) => { const n = parseInt(hex.slice(1), 16), mix = (c, t) => Math.round(c + (t - c) * 0.6);
+      return "#" + ((mix(n >> 16, 0xdf) << 16) | (mix((n >> 8) & 255, 0xe3) << 8) | mix(n & 255, 0xf2)).toString(16).padStart(6, "0"); };
+    body.voxels.forEach((vx) => { vx.c = pale(vx.c); });
+  }
   const front = new Map();   // the pupils sit on the face, one cube proud of the eye whites, so they can slide about
   body.voxels.forEach((v) => { const k = v.x + "," + v.y; if (!front.has(k) || front.get(k) < v.z) front.set(k, v.z); });
   const pupils = { voxels: [], w: body.w, h: body.h, d: 1 };
@@ -450,9 +455,10 @@ function mountStageIn(canvas, host) {   // first time: load three and build him;
         onDizzy: () => { say(DIZZY_LINES[Math.floor(Math.random() * DIZZY_LINES.length)], 2600); play(S.cute.petMadSound, undefined, 0.6);
           if (memory.pet) { memory.pet.dizzy = (memory.pet.dizzy || 0) + 1; savePet(); checkFriends(memory.pet, memory.data, memory.view, Math.floor(Date.now() / 1000)); } } });
       memory.stageKey = m.key;
+      if (memory.stageCtrl.setGhost) memory.stageCtrl.setGhost(memory.view.face === "ghost");
       redraw();   // the column turns "live": the sprite steps aside
     }).catch((e) => { memory.stageLoading = false; const el = host.querySelector(".bb-stage-err"); if (el) el.textContent = "3D didn't load: " + String((e && e.message) || e); });
-  } else if (m.key !== memory.stageKey) { memory.stageKey = m.key; memory.stageCtrl.setModel(m.body, m.pupils); memory.stageCtrl.setRoll(memory.view.stage >= 5); }
+  } else if (m.key !== memory.stageKey) { memory.stageKey = m.key; memory.stageCtrl.setModel(m.body, m.pupils); memory.stageCtrl.setRoll(memory.view.stage >= 5); if (memory.stageCtrl.setGhost) memory.stageCtrl.setGhost(memory.view.face === "ghost"); }
   const fkey = friendsOf(memory.pet).map((f) => f.id).join(",");
   if (memory.stageCtrl && memory.stageCtrl.setFriends && fkey !== memory.friendsKey) {
     memory.friendsKey = fkey;

@@ -709,7 +709,11 @@ export function mountStage(canvas, model, opts = {}) {
     const fp = (tNow - st.flinchAt) / 350;
     const fe = fp >= 0 && fp < 1 ? Math.sin(Math.PI * fp) : 0;   // flinch: small squash + 0.15 rad lean away
     pet.body.scale.set(hop.sx * (1 + 0.1 * fe), hop.sy * breath * (1 - 0.1 * fe), hop.sx * (1 + 0.1 * fe));
-    pet.root.position.y = bob;
+    // a ghost floats, see-through, and casts no shadow
+    const ghostLift = st.ghost ? pet.bounds.h * s * 0.35 + 0.12 * sv * Math.sin((st.t * TAU) / 1.9) : 0;
+    const bm = pet.bodyMesh.material, wantOp = st.ghost ? 0.55 : 1;
+    if (bm.opacity !== wantOp) { bm.transparent = !!st.ghost; bm.opacity = wantOp; bm.depthWrite = !st.ghost; bm.needsUpdate = true; pet.bodyMesh.castShadow = !st.ghost; }
+    pet.root.position.y = bob + ghostLift;
     const Q = st.q;
     Q.body.setFromAxisAngle(Q.z, sway);
     if (fe > 0) {
@@ -810,6 +814,7 @@ export function mountStage(canvas, model, opts = {}) {
     isDizzy() {
       return st.dizzy;
     },
+    setGhost(on) { st.ghost = !!on; },
     setRoll(on) {
       on = !!on;
       if (on === st.roll) return;
