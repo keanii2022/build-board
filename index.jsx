@@ -1935,6 +1935,19 @@ function ChestCard({ stored, hidden, pet, view }) {   // the window the chest op
                 </div>
               </div>
             ) : null}
+            {pet ? (
+              <div>
+                <div className="sec"><span>shop</span><span>{shelf.left} to find · new shelf in {mins} min</span></div>
+                {!hatched ? <div className="empty">the shop opens when the egg hatches.</div>
+                  : shop.length ? (
+                    <div className="items">{shop.map((it) => (
+                      <div className={"it buy" + (it.deal ? " deal" : "")} key={it.id} title={`${it.line} · ${it.price} coins${it.deal ? ` (was ${it.was})` : ""}`} onClick={() => buyItem(it.id)}>
+                        <div className="sp">{sprite(it)}</div><b>{it.name}</b><i className={"pr" + (coins >= it.price ? " ok" : "")}>{it.price}{it.deal ? <em>sale</em> : null}</i>
+                      </div>))}
+                    </div>
+                  ) : <div className="empty">sold out. you own it all.</div>}
+              </div>
+            ) : null}
             <div className="sec"><span>projects</span><span>{kept.length} in the chest</span></div>
             {kept.length ? kept.map(row) : (!hidden || !hidden.length) ? <div className="empty">drag a project's icon onto the chest to put it away.</div> : null}
             {hidden && hidden.length ? (
@@ -1947,19 +1960,6 @@ function ChestCard({ stored, hidden, pet, view }) {   // the window the chest op
                     <span className="bb-name">{name(p)}</span>
                     <span className="out" onClick={(e) => { e.stopPropagation(); unhideProject(p.id); }} title="bring it back">+</span>
                   </div>)) : null}
-              </div>
-            ) : null}
-            {pet ? (
-              <div>
-                <div className="sec"><span>shop</span><span>{shelf.left} to find · new shelf in {mins} min</span></div>
-                {!hatched ? <div className="empty">the shop opens when the egg hatches.</div>
-                  : shop.length ? (
-                    <div className="items">{shop.map((it) => (
-                      <div className={"it buy" + (it.deal ? " deal" : "")} key={it.id} title={`${it.line} · ${it.price} coins${it.deal ? ` (was ${it.was})` : ""}`} onClick={() => buyItem(it.id)}>
-                        <div className="sp">{sprite(it)}</div><b>{it.name}</b><i className={"pr" + (coins >= it.price ? " ok" : "")}>{it.price}{it.deal ? <em>sale</em> : null}</i>
-                      </div>))}
-                    </div>
-                  ) : <div className="empty">sold out. you own it all.</div>}
               </div>
             ) : null}
           </div>
