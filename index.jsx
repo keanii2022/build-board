@@ -747,6 +747,8 @@ function styles(busy) {
     .bb-pet.shiny .px { animation: bb-hue 2.4s linear infinite; }
     .bb-pet.hatch { animation: bb-squish .7s cubic-bezier(.3,1.6,.4,1) 3 !important; }
     .bb-pet:hover { opacity: 1; }
+    .bb-statsbtn { display: inline-block; margin-left: 3px; padding-bottom: 1px; opacity: .5; cursor: pointer; transition: opacity .15s ease, transform .15s ease; }
+    .bb-statsbtn:hover { opacity: 1; transform: translateY(-1px); }
     .bb-pet.poked { animation: bb-squish .45s cubic-bezier(.3,1.6,.4,1) !important; }
     .bb-held, .bb-friend, .bb-snack { animation: bb-pop .5s cubic-bezier(.2,1.4,.4,1); }
     .bb-held { margin-left: -5px; margin-bottom: 7px; }     /* sits in the hand, not floating */
@@ -1046,12 +1048,13 @@ function renamePet(fly, pet, v) {   // the name in the card turns into a box; En
   inp.onblur = () => finish(true);
   inp.focus(); inp.select();
 }
-function showCloset(e) {
-  const wrap = e.currentTarget, bb = wrap.closest(".bb"), fly = bb && bb.querySelector(".bb-closet");
-  const pet = memory.pet, v = memory.view;
-  if (!fly || !pet || !v) return;
-  clearTimeout(memory.closetT);
-  memory.closetT = setTimeout(() => { hideFly(); keepFly(); buildCloset(fly, bb, wrap); }, 350);
+function toggleCloset(e) {   // the little chart beside the pet: open the stats card, click again to close it
+  e.stopPropagation(); e.preventDefault();
+  const wrap = e.currentTarget.closest(".bb-petwrap"), bb = wrap && wrap.closest(".bb"), fly = bb && bb.querySelector(".bb-closet");
+  if (!fly || !memory.pet || !memory.view) return;
+  if (closetShowing()) { hideFly(); return; }
+  hideFly(); keepFly(); buildCloset(fly, bb, wrap);
+  play(S.cute.clickSound);
 }
 function buildCloset(fly, bb, wrap) {   // stats, the shop, what's collected
   const pet = memory.pet, v = memory.view, c = S.cute.coins;
@@ -1375,9 +1378,9 @@ function Pet({ view, mood, now }) {
                memory.hatchAt && now - memory.hatchAt < 5 ? "hatch" : ""].join(" ");
   const bar = egg ? view.steps / S.cute.hatchAt : 0;   // the bar only counts to the hatch now; after that the wallet shows
   const nm = memory.pet && memory.pet.name, coins = (memory.pet && memory.pet.coins) || 0;
-  const tip = egg ? `${nm || "an egg"} · ${S.cute.hatchAt - view.steps} steps to hatch` : `${nm ? nm + " · " : ""}${view.faceWord} · ${view.stageWord} · ${coins} coins · hover for the shop`;
+  const tip = egg ? `${nm || "an egg"} · ${S.cute.hatchAt - view.steps} steps to hatch` : `${nm ? nm + " · " : ""}${view.faceWord} · ${view.stageWord} · ${coins} coins · the chart opens the stats`;
   return (
-    <span className={"bb-petwrap" + (memory.dropAt && now - memory.dropAt < 60 ? " drop" : "")} onMouseEnter={showCloset} onMouseLeave={scheduleHideCloset} title={tip}>
+    <span className={"bb-petwrap" + (memory.dropAt && now - memory.dropAt < 60 ? " drop" : "")} onMouseLeave={scheduleHideCloset} title={tip}>
       {view.snack ? <Px rows={view.snack} s={s} className="bb-snack" key={view.snack.join("")} /> : null}
       <span className={cls} onClick={poke}>
         <Px rows={d.body} s={s} />
@@ -1387,6 +1390,7 @@ function Pet({ view, mood, now }) {
       {view.held ? <span className={"bb-held" + (view.carry && view.friend ? " late" : "") + (view.heldId ? " thing" : "")} key={view.held.join("")}
           data-item={view.heldId || undefined} onMouseDown={view.heldId ? dragItem : undefined} title={view.heldId ? "drag it off, onto the friend, or into the chest" : undefined}>
           <Px rows={view.held} s={s} /></span> : null}
+      <span className="bb-statsbtn" onClick={toggleCloset} onMouseDown={(e) => e.stopPropagation()} title="stats"><Px rows={EXTRA.chart} s={1.5} /></span>
       {egg ? <i className="bb-treat"><i style={{ width: `${Math.round(bar * 100)}%` }} /></i>
            : <i className="bb-wallet" key={coins}><Px rows={EXTRA.coin} s={1.5} />{coins}</i>}
       <span className="bb-say" />

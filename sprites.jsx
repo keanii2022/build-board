@@ -2,7 +2,7 @@
 // Every picture is a little text grid. '.' is empty, every other letter is a colour from PAL.
 // Add your own: push an object into ITEMS (treats) or SNACKS (first push of the day) and forget it exists.
 //   kind "hold"  = it sits in the pet's hands beside it
-//   kind "shelf" = it lives in the closet (hover the pet), and beside the pet for a day after it drops
+//   kind "shelf" = it lives in the closet (the chart beside the pet), and beside the pet for a day after it drops
 //   kind "wear"  = painted onto the pet. proc: "chain" | "shades" | "cartier" | "grill" | "belly" | "swap" | "hat"
 // The pet never tells you what's left in the pool. Neither should you look.
 
@@ -140,6 +140,7 @@ export const EXTRA = {
   trophy: ["ggggggg", ".ggggg.", ".ggggg.", "..ggg..", "...g...", "..ggg..", ".ggggg."],
   flame: ["..o...", ".oo.o.", ".ooooo", ".oroo.", ".orro.", "..rr.."],
   coin: [".ggg.", "gGGGg", "gGgGg", "gGGGg", ".ggg."],
+  chart: ["....b", "..t.b", "..t.b", "p.t.b", "p.t.b", "p.t.b"],   // the tiny bar chart beside the pet: click it for the stats card
   box: ["nnnnnnnn", "nnncnnnn", "ccccccc", "nnncnnnn", "nnncnnnn", "nnnnnnnn"],
   grave: ["..kkkkk..", ".kYYYYYk.", "kYYYYYYYk", "kYYkkkYYk", "kYYYkYYYk", "kYYYkYYYk", "kYYYYYYYk", "kYYYYYYYk", "kkkkkkkkk", "eeeeeeeee"],
   egg: ["....wwww....", "...wwwwww...", "..wwwwpwww..", "..wwwwwwww..", ".wwwpwwwwww.", ".wwwwwwwpww.", ".wwwwwwwwww.",
