@@ -126,7 +126,7 @@ const SETTINGS = {
                                // "dropdown": opens under the project (can run off the bottom of the screen).
 
   // ── Clicks ────────────────────────────────────────────────────────────────
-  lock: { idleMinutes: 10, onOpen: true, reset: false },   // a 4-digit pin (set on first ask, kept hashed in this widget's own storage): asked after idleMinutes without a touch (0 = never), and before a project opens. reset: true forgets it on the next refresh
+  lock: { idleMinutes: 10, onOpen: true, reset: false },   // one password for the whole board (set when first asked, kept hashed in this widget's own storage, never in a file): asked after idleMinutes without a touch (0 = never), and before any project opens. reset: true forgets it on the next refresh
   clickOpens: "claude",       // "claude" = a new Claude Code session in that folder. "editor" = the app below. "" = nothing.
   openWith: "Visual Studio Code",
   boardUrl: "https://github.com/keanii2022",   // opens when you click the title (your GitHub)
@@ -236,23 +236,22 @@ function ago(ts, now) {
 }
 
 function sh(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
-// ── The pin: a numpad over the glass (the desktop takes no keyboard, so it's clicks) ────────
+// ── The lock: a password over the glass. Click the field and type; enter submits. ─────────
 const PIN_KEY = "build-board.pin";
 async function pinHash(p) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("bb:" + p)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
 function pinStored() { try { return localStorage.getItem(PIN_KEY) || ""; } catch (e) { return ""; } }
 function askPin(reason, then, cancellable) { memory.pin = { mode: pinStored() ? "enter" : "set", reason, then, entry: "", first: "", err: false, cancellable }; redraw(); }
-function pinPress(d) {
+function pinSubmit(code) {
   const P = memory.pin; if (!P) return;
-  P.err = false; P.entry += d;
-  if (P.entry.length < 4) { redraw(); return; }
-  const code = P.entry; P.entry = "";
+  P.err = false; P.entry = "";
+  if (!code || code.length < 4) { P.err = "at least 4 characters."; redraw(); return; }
   if (P.mode === "set") { P.first = code; P.mode = "confirm"; redraw(); return; }
   if (P.mode === "confirm") {
-    if (code !== P.first) { P.mode = "set"; P.first = ""; P.err = true; redraw(); return; }
+    if (code !== P.first) { P.mode = "set"; P.first = ""; P.err = "didn't match. again."; redraw(); return; }
     pinHash(code).then((h) => { try { localStorage.setItem(PIN_KEY, h); } catch (e) {} pinDone(); });
     return;
   }
-  pinHash(code).then((h) => { if (h === pinStored()) pinDone(); else { P.err = true; play(S.cute.petMadSound, undefined, 1.2); redraw(); } });
+  pinHash(code).then((h) => { if (h === pinStored()) pinDone(); else { P.err = "no."; play(S.cute.petMadSound, undefined, 1.2); redraw(); } });
 }
 function pinDone() { const P = memory.pin; memory.pin = null; memory.locked = false; memory.lastActive = Date.now(); play(S.cute.clickSound); if (P && P.then) P.then(); redraw(); }
 function pinCancel() { if (memory.pin && memory.pin.cancellable) { memory.pin = null; redraw(); } }
@@ -263,18 +262,26 @@ function checkIdle() {
   if (Date.now() - (memory.lastActive || 0) > m * 60000) { memory.locked = true; askPin("locked", null, false); }
 }
 function guarded(fn, what) { if (S.lock && S.lock.onOpen) askPin(what ? `open ${what}` : "open", fn, true); else fn(); }
+function focusLock(el) { if (el && document.activeElement !== el) setTimeout(() => { try { el.focus(); } catch (e) {} }, 30); }
 function LockPad() {
   const P = memory.pin; if (!P) return null;
-  const title = P.mode === "set" ? "set a 4-digit pin" : P.mode === "confirm" ? "once more" : P.reason === "locked" ? "locked" : `pin to ${P.reason}`;
-  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", P.cancellable ? "✕" : ""];
-  const press = (k) => { if (k === "⌫") { P.entry = P.entry.slice(0, -1); P.err = false; redraw(); } else if (k === "✕") pinCancel(); else if (k) pinPress(k); };
+  const title = P.mode === "set" ? "set a password" : P.mode === "confirm" ? "once more" : P.reason === "locked" ? "locked" : P.reason;
+  const onKey = (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") { pinSubmit(e.currentTarget.value); e.currentTarget.value = ""; }
+    else if (e.key === "Escape") pinCancel();
+  };
   return (
-    <div className={"bb-lock" + (P.err ? " err" : "")} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onMouseMove={(e) => e.stopPropagation()}>
+    <div className={"bb-lock" + (P.err ? " err" : "")} onClick={(e) => { e.stopPropagation(); const i = e.currentTarget.querySelector("input"); if (i) i.focus(); }}
+         onMouseDown={(e) => e.stopPropagation()} onMouseMove={(e) => e.stopPropagation()}>
       <div className="bb-lock-card">
         <div className="t">{title}</div>
-        <div className="dots">{[0, 1, 2, 3].map((i) => <i key={i} className={i < P.entry.length ? "on" : ""} />)}</div>
-        <div className="pad">{keys.map((k, i) => <span key={i} className={k ? "" : "gap"} onClick={() => press(k)}>{k}</span>)}</div>
-        <div className="e">{P.err ? (P.mode === "set" ? "didn't match. again." : "no.") : "\u00a0"}</div>
+        <input className="bb-lock-in" type="password" placeholder="password" autoComplete="off" spellCheck={false} ref={focusLock} onKeyDown={onKey} onMouseDown={(e) => e.stopPropagation()} />
+        <div className="row">
+          <span className="go" onClick={(e) => { const i = e.currentTarget.closest(".bb-lock-card").querySelector("input"); pinSubmit(i.value); i.value = ""; }}>enter</span>
+          {P.cancellable ? <span className="go dim" onClick={pinCancel}>cancel</span> : null}
+        </div>
+        <div className="e">{P.err || "\u00a0"}</div>
       </div>
     </div>
   );
@@ -891,17 +898,16 @@ function styles(busy) {
       background: rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
     .bb-lock-card { text-align: center; }
     .bb-lock .t { font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: ${S.muted}; margin-bottom: 14px; }
-    .bb-lock .dots { display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; }
-    .bb-lock .dots i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.35); }
-    .bb-lock .dots i.on { background: ${S.text}; border-color: ${S.text}; }
-    .bb-lock .pad { display: grid; grid-template-columns: repeat(3, 44px); gap: 8px; }
-    .bb-lock .pad span { height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; color: ${S.text};
-      background: rgba(255,255,255,0.07); cursor: pointer; user-select: none; -webkit-user-select: none; transition: background .12s, transform .12s; }
-    .bb-lock .pad span:hover { background: rgba(255,255,255,0.14); }
-    .bb-lock .pad span:active { transform: scale(.94); }
-    .bb-lock .pad span.gap { visibility: hidden; }
+    .bb-lock-in { display: block; width: 200px; box-sizing: border-box; padding: 9px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.14); outline: none;
+      background: rgba(255,255,255,0.06); color: ${S.text}; font: inherit; font-size: 13px; letter-spacing: 0.08em; text-align: center; caret-color: ${S.text}; }
+    .bb-lock-in:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.09); }
+    .bb-lock-in::placeholder { color: ${S.muted}; letter-spacing: 0; }
+    .bb-lock .row { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+    .bb-lock .go { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 6px 14px; border-radius: 999px; background: rgba(255,255,255,0.08); cursor: pointer; color: ${S.text}; user-select: none; -webkit-user-select: none; }
+    .bb-lock .go:hover { background: rgba(255,255,255,0.15); }
+    .bb-lock .go.dim { background: transparent; color: ${S.muted}; }
     .bb-lock .e { margin-top: 10px; font-size: 10px; color: ${S.spectrum[3] || S.accent}; min-height: 14px; }
-    .bb-lock.err .dots { animation: bb-shake .4s ease; }
+    .bb-lock.err .bb-lock-in { animation: bb-shake .4s ease; }
     @keyframes bb-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
     .bb-proj { position: relative; }
     ${S.stepsStyle === "flyout" ? `
@@ -2078,7 +2084,7 @@ class Board extends React.Component {
     memory.redraw = () => this.forceUpdate(); placeChest(); placeStage();
     if (S.lock && S.lock.reset) { try { localStorage.removeItem(PIN_KEY); } catch (e) {} }
     if (!memory.idleT) memory.idleT = setInterval(checkIdle, 15000);
-    if (!memory.keyT) { memory.keyT = true; window.addEventListener("keydown", (e) => { if (!memory.pin) return; if (/^[0-9]$/.test(e.key)) pinPress(e.key); else if (e.key === "Backspace") { memory.pin.entry = memory.pin.entry.slice(0, -1); redraw(); } else if (e.key === "Escape") pinCancel(); }); }
+    if (!memory.keyT) { memory.keyT = true; window.addEventListener("keydown", (e) => { if (!memory.pin) return; const i = document.querySelector(".bb-lock-in"); if (i && document.activeElement !== i && e.key.length === 1) { i.focus(); } if (e.key === "Escape") pinCancel(); }); }
   }
   componentDidUpdate() { placeChest(); placeStage(); }
   componentWillUnmount() { memory.redraw = null; }
