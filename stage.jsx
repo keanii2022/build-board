@@ -677,8 +677,9 @@ export function mountStage(canvas, model, opts = {}) {
       st.yawVel *= velDamp; st.pitchVel *= velDamp;
       if (!dragFresh && !st.roll) dPitch += (0 - st.pitch) * (1 - Math.exp(-3 * dt));
     } else if (!st.roll && tNow - st.lastLook < LOOK_HOLD) {
-      dYaw = (st.yawT - st.yaw) * (1 - Math.exp(-6 * dt));
-      dPitch = (st.pitchT - st.pitch) * (1 - Math.exp(-6 * dt));
+      // the pointer is over him: the eyes do the following (pupils), the body keeps its slow turn with just a hint of a nod
+      dYaw = SPIN * dt;
+      dPitch = (st.pitchT * 0.4 - st.pitch) * (1 - Math.exp(-3 * dt));
     } else {
       dYaw = SPIN * dt;
       if (!st.roll) dPitch = (0 - st.pitch) * (1 - Math.exp(-3 * dt));
@@ -790,10 +791,6 @@ export function mountStage(canvas, model, opts = {}) {
       st.pitchT = -ny * 0.25;
       st.pxT = nx * 0.8 * s;
       st.pyT = ny * 0.5 * s;
-      // enter look mode from wherever the spin left off, wrapped to the near side
-      if (!st.roll && now() - st.lastLook >= LOOK_HOLD) {
-        st.yaw = ((st.yaw + Math.PI) % TAU + TAU) % TAU - Math.PI;
-      }
       st.lastLook = now();
     },
     poke() {
