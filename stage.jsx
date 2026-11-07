@@ -405,9 +405,10 @@ export function mountStage(canvas, model, opts = {}) {
     const d = st.drag;
     if (!d || e.pointerId !== d.id) return;
     st.drag = null;
-    st.dragEnd = now();
-    st.wasDrag = d.moved || now() - d.t0 >= CLICK_MS;
-    if (now() - d.lastMove > 80) { st.yawVel = 0; st.pitchVel = 0; } // held still before release
+    const clicked = !d.moved && now() - d.t0 < CLICK_MS;
+    st.wasDrag = !clicked;
+    st.dragEnd = clicked ? -Infinity : now();   // a click is not a drag: no hold, no freeze, the look and the spin carry on as if nothing happened
+    if (clicked || now() - d.lastMove > 80) { st.yawVel = 0; st.pitchVel = 0; } // held still before release
     try { canvas.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
   };
   canvas.addEventListener("pointerdown", onDown);
