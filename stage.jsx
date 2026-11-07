@@ -794,6 +794,15 @@ export function mountStage(canvas, model, opts = {}) {
     poke() {
       st.hopAt = now();
     },
+    hit(nx, ny) {   // what's under the pointer: "belly" | "head" | null (nx, ny like look(): -1..1, ny up)
+      if (!st.pet || !st.camera || !st.THREE) return null;
+      const T = st.THREE, rc = st._ray || (st._ray = new T.Raycaster());
+      rc.setFromCamera(new T.Vector2(+nx || 0, +ny || 0), st.camera);
+      const hits = rc.intersectObject(st.pet.bodyMesh, false);
+      if (!hits.length) return null;
+      const local = st.pet.root.worldToLocal(hits[0].point.clone());
+      return local.y < st.pet.bounds.h * s * 0.58 ? "belly" : "head";
+    },
     wasDrag() {
       return st.wasDrag;
     },

@@ -465,12 +465,21 @@ function stageLook(e) {
   memory.stageCtrl.look(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2);   // the stage wants +1 at the top
 }
 const DIZZY_LINES = ["the room is spinning.", "ok. ok. put me down.", "i see three of you.", "that was the whole step budget.", "why."];
+const HEAD_LINES = ["not the head.", "lower.", "the belly. it's right there.", "hey."];
 function stagePoke(e) {
   e.stopPropagation();
-  if (memory.stageCtrl && memory.stageCtrl.wasDrag()) return;   // a spin is not a poke
+  const ctrl = memory.stageCtrl;
+  if (ctrl && ctrl.wasDrag()) return;   // a spin is not a poke
+  let where = "belly";
+  if (ctrl && ctrl.hit) {   // only a click on him counts, and only the belly is a poke
+    const r = e.currentTarget.getBoundingClientRect();
+    where = ctrl.hit(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2);
+  }
+  if (!where) return;   // clicked the room, not him
+  if (where === "head") { say(HEAD_LINES[Math.floor(Math.random() * HEAD_LINES.length)], 1600); return; }
   const petEl = document.querySelector(".bb-pet");
   if (petEl) poke({ currentTarget: petEl, stopPropagation() {}, preventDefault() {} });
-  if (memory.stageCtrl) memory.stageCtrl.poke();
+  if (ctrl) ctrl.poke();
 }
 function Thumb({ item }) {   // a reward as a little 3D object (rendered once, then cached)
   memory.thumbs = memory.thumbs || {};
