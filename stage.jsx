@@ -451,7 +451,7 @@ export function mountStage(canvas, model, opts = {}) {
     const f = {
       id, model, mesh, group, bounds: b, fw: b.w * fs, fs,
       pos: { x: 0, z: 0 }, target: { x: 0, z: 0 }, face: 0,
-      state: "pause", pauseUntil: tNow + 300 + Math.random() * 1200,
+      state: "pause", pauseUntil: tNow + 300 + Math.random() * 1200, seed: Math.random() * 10,
       bornAt: tNow, hopAt: -Infinity, spinAt: -Infinity, walked: 0,
     };
     return f;
@@ -491,10 +491,10 @@ export function mountStage(canvas, model, opts = {}) {
       } else {
         const dx = f.target.x - f.pos.x, dz = f.target.z - f.pos.z;
         const dist = Math.hypot(dx, dz);
-        const step = 2.0 * fs * dt;   // slow amble: ~2 friend-voxels per second
+        const step = 4.0 * fs * dt;   // a brisk amble: ~4 friend-voxels per second
         if (dist <= step) {
           f.pos.x = f.target.x; f.pos.z = f.target.z;
-          f.state = "pause"; f.pauseUntil = tNow + 1000 + Math.random() * 3000;
+          f.state = "pause"; f.pauseUntil = tNow + 500 + Math.random() * 1500;
         } else {
           f.pos.x += (dx / dist) * step; f.pos.z += (dz / dist) * step;
           f.walked += step;
@@ -505,7 +505,12 @@ export function mountStage(canvas, model, opts = {}) {
         }
       }
       const walking = f.state === "walk";
-      const stepBob = walking ? Math.abs(Math.sin((f.walked / fs) * Math.PI * 0.9)) * 0.22 * fs : 0;
+      if (!walking) {   // never quite still: a breath, a look around, the odd hop
+        f.face += Math.sin(tNow / 700 + f.seed) * 0.006;
+        if (Math.random() < dt * 0.12 && tNow - f.hopAt > HOP_MS * 2) f.hopAt = tNow;
+      }
+      const idle = walking ? 0 : Math.sin(tNow / 260 + f.seed) * 0.06 * fs;
+      const stepBob = (walking ? Math.abs(Math.sin((f.walked / fs) * Math.PI * 0.9)) * 0.22 * fs : 0) + idle;
       const pop = easeOutBack(Math.min(1, (tNow - f.bornAt) / POP_MS));
       const hop = hopPose((tNow - f.hopAt) / HOP_MS);
       const sp = (tNow - f.spinAt) / FSPIN_MS;
