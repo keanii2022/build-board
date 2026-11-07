@@ -798,12 +798,12 @@ function styles(busy) {
     .bb-proj.ins-before::after, .bb-proj.ins-after::after { content: ""; position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px;
       background: ${SPECTRUM}; background-size: 200% 100%; top: -7px; }
     .bb-proj.ins-after::after { top: auto; bottom: -7px; }
-    .bb-chestbar { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 14px -6px 0; padding: 12px 6px 4px; border-top: 1px solid ${S.edge};
-      border-radius: 12px; transition: background .2s; }
+    .bb-chestbar { flex: none; position: relative; display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin: 2px -6px 0; padding: 6px 6px 0;
+      border-top: 1px solid ${S.edge}; border-radius: 12px; transition: background .2s; }   /* a thin footer under the list: the chest is always in reach */
     .bb-chestbar.over { background: rgba(244,198,79,0.08); }
     .bb-chestbar.over .bb-chestbtn { transform: translateY(-5px) scale(1.15); filter: drop-shadow(0 0 14px rgba(244,198,79,0.9)); animation: none; }
     .bb-chestbtn { display: inline-flex; line-height: 0; cursor: pointer; transition: transform .25s cubic-bezier(.3,1.5,.4,1), filter .25s;
-      filter: drop-shadow(0 0 7px rgba(244,198,79,0.45)); animation: bb-glow 3.2s ease-in-out infinite; }
+      filter: drop-shadow(0 0 5px rgba(244,198,79,0.35)); }
     .bb-chestbtn:hover { transform: translateY(-3px) scale(1.08); }
     .bb-chestbtn.open { filter: drop-shadow(0 0 12px rgba(244,198,79,0.85)); animation: none; }
     @keyframes bb-glow { 0%, 100% { filter: drop-shadow(0 0 5px rgba(244,198,79,0.35)); } 50% { filter: drop-shadow(0 0 12px rgba(244,198,79,0.75)); } }
@@ -1498,11 +1498,11 @@ function Chest({ stored, pet, view }) {   // the chest itself: a glowing button 
   const unbox = memory.unbox && Date.now() - memory.unbox.at < 3000 ? ITEMS.find((it) => it.id === memory.unbox.id) : null;
   return (
     <div className="bb-chestbar">
+      <span className="bb-chest-sum"><b>CHEST</b>{sum ? ` · ${sum}` : ""}{hatched ? <span className="wallet"><Px rows={EXTRA.coin} s={1.5} />{coins}</span> : null}</span>
       <span className={"bb-chestbtn" + (open || unbox ? " open" : "") + (unbox ? " pop" : "")} onClick={toggleChest} title={open ? "close the chest" : "open the chest · drop a project's icon here to put it away"}>
-        <Px rows={open || unbox ? CHEST_OPEN : CHEST_CLOSED} s={3} />
+        <Px rows={open || unbox ? CHEST_OPEN : CHEST_CLOSED} s={2} />
         {unbox ? <span className="bb-unbox" key={memory.unbox.at}><Px rows={unbox.proc && !unbox.grid ? wearPreview(unbox) : unbox.grid} s={3} /><Burst kind="done" at={memory.unbox.at} /></span> : null}
       </span>
-      <span className="bb-chest-sum"><b>CHEST</b>{sum ? ` · ${sum}` : ""}{hatched ? <span className="wallet"><Px rows={EXTRA.coin} s={1.5} />{coins}</span> : null}</span>
     </div>
   );
 }
@@ -1604,7 +1604,9 @@ function placeChest() {   // after every draw: the card sits beside the chest (o
   fly.classList.remove("in", "left", "right"); fly.classList.add("over", "show");
   fly.style.marginLeft = ""; fly.style.marginRight = ""; fly.style.top = Math.round(top) + "px";
   const head = fly.querySelector(".bb-fly-head"), headH = head ? head.getBoundingClientRect().height / z : 36;
-  if (body) body.style.maxHeight = Math.max(80, br.height / z - top - headH - 40) + "px";
+  const bar = bb.querySelector(".bb-chestbar");   // the card ends above the footer, so the chest stays clickable
+  const floor = bar ? (bar.getBoundingClientRect().top - br.top) / z - 8 : br.height / z - 16;
+  if (body) body.style.maxHeight = Math.max(80, floor - top - headH - 30) + "px";   // 30 = the card's padding and its 6px lift
 }
 
 function Title() {
@@ -1706,10 +1708,10 @@ function renderBoard({ output, error }) {
             {parked.length ? (
               <div className="bb-parked"><b>PARKED</b>{parked.map((p) => S.names[p.id] || p.name).join(" · ")}</div>
             ) : null}
-            {S.cute.chest !== false ? <Chest stored={stored} pet={memory.pet} view={view} /> : null}
           </div>
         )}
       </div>
+      {S.cute.chest !== false && !(error || parseError) ? <Chest stored={stored} pet={memory.pet} view={view} /> : null}
       {S.hoverSteps && S.stepsStyle === "flyout" ? (
         <div className="bb-fly right" onMouseEnter={keepFly} onMouseLeave={scheduleHide} onClick={(e) => e.stopPropagation()}>
           <div className="bb-fly-card">
