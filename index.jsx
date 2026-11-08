@@ -949,8 +949,10 @@ function styles(busy) {
     .bb-refresh { position: absolute; left: 18px; bottom: 10px; z-index: 61; font-size: 13px; line-height: 1; color: ${S.muted}; opacity: .35; cursor: pointer; user-select: none; -webkit-user-select: none; transition: opacity .2s, transform .3s; }
     .bb-refresh:hover { opacity: 1; transform: rotate(90deg); }
     .bb > .bb-refresh { left: 46px; bottom: 11px; z-index: 3; }   /* next to the sound toggle */
-    .bb-lockbtn { position: absolute; left: 68px; bottom: 11px; z-index: 3; line-height: 0; opacity: .35; cursor: pointer; transition: opacity .2s, transform .2s; }
-    .bb-lockbtn:hover { opacity: 1; transform: translateY(-1px); }
+    .bb-lockbtn { position: absolute; left: 68px; bottom: 7px; z-index: 3; display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px 4px 7px; border-radius: 999px; line-height: 0;
+      border: 1px solid rgba(255,255,255,0.14); color: ${S.text}; opacity: .7; cursor: pointer; user-select: none; -webkit-user-select: none; transition: opacity .2s, background .2s, transform .2s; }
+    .bb-lockbtn b { font-size: 8.5px; font-weight: 600; letter-spacing: .14em; line-height: 1; }
+    .bb-lockbtn:hover { opacity: 1; background: rgba(255,255,255,0.08); transform: translateY(-1px); }
     @keyframes bb-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
     .bb-proj { position: relative; }
     ${S.stepsStyle === "flyout" ? `
@@ -2156,7 +2158,7 @@ function renderBoard({ output, error }) {
       ) : null}
       <span className="bb-refresh" onClick={(e) => { e.stopPropagation(); refreshWidget(); }} onMouseDown={(e) => e.stopPropagation()} title="reload the widget">↻</span>
       <span className="bb-lockbtn" onClick={(e) => { e.stopPropagation(); lockNow(e.shiftKey); }} onDoubleClick={(e) => { e.stopPropagation(); lockNow(true); }} onMouseDown={(e) => e.stopPropagation()}
-            title="lock · shift-click or double-click: lock for company"><Px rows={LOCK_PX} s={1.5} /></span>
+            title="lock · shift-click or double-click: lock for company"><Px rows={LOCK_PX} s={1.5} /><b>LOCK</b></span>
       <span className="bb-edge" onMouseDown={(e) => startResize(e, "w")} title="drag for width" />
       <span className="bb-edge l" onMouseDown={(e) => startResize(e, "l")} title="drag for width" />
       <span className="bb-grip l" onMouseDown={(e) => startResize(e, "lh")} onDoubleClick={resetSize} title="drag to resize · double-click to reset" />
