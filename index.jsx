@@ -1019,7 +1019,7 @@ function styles(busy) {
       box-shadow: inset 0 0 0 1px ${S.edge}, 0 6px 18px rgba(0,0,0,0.4); opacity: 0; transform: translateY(4px) scale(.9); transform-origin: 100% 100%;
       transition: opacity .18s ease, transform .18s cubic-bezier(.2,1.4,.4,1); pointer-events: none; z-index: 6; }
     .bb-say.show { opacity: 1; transform: none; }
-    .bb-say-stage { position: absolute; left: 50%; top: 22%; z-index: 6; pointer-events: none; max-width: 78%; text-align: center; white-space: normal; line-height: 1.3;
+    .bb-say-stage { position: absolute; left: 50%; top: 22%; z-index: 4; pointer-events: none; max-width: 78%; text-align: center; white-space: normal; line-height: 1.3;
       font-size: 11.5px; font-weight: 600; color: ${S.text}; padding: 6px 11px; border-radius: 12px; background: rgba(28,27,36,0.97);
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), 0 10px 26px rgba(0,0,0,0.45); transform-origin: 50% 100%;
       opacity: 0; transform: translate(-50%, 8px) scale(.6); transition: opacity .16s ease, transform .22s ease; }
@@ -1050,7 +1050,8 @@ function styles(busy) {
     .bb .it.buy { cursor: pointer; border-radius: 8px; padding: 4px 2px; margin: -4px -2px; transition: background .15s, transform .15s; }
     .bb .it.buy:hover { background: rgba(255,255,255,0.06); transform: translateY(-2px); }
     .bb .it.buy.deal .pr { color: ${S.spectrum[3] || S.accent}; }
-    .bb .it.buy.deal .pr em { font-style: normal; font-size: 7.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-left: 3px; opacity: .85; }
+    .bb .it.buy.deal .pr { white-space: nowrap; }
+    .bb .it.buy.deal .pr em { font-style: normal; font-size: 7px; letter-spacing: 0.12em; text-transform: uppercase; margin-left: 5px; padding-left: 5px; border-left: 1px solid rgba(255,255,255,0.35); opacity: .9; }
     .bb .it .pr { font-style: normal; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; color: ${S.muted};
       border: 1px solid rgba(255,255,255,0.14); }
     .bb .it .pr.ok { color: #fff; border-color: transparent; background: ${SPECTRUM}; background-size: 200% 100%; }
