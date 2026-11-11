@@ -1064,6 +1064,8 @@ function styles(busy) {
     .bb .sec .wallet { color: ${S.spectrum[1] || S.accent}; font-weight: 700; }
     .bb .it.buy { cursor: pointer; border-radius: 8px; padding: 4px 2px; margin: -4px -2px; transition: background .15s, transform .15s; }
     .bb .it.buy:hover { background: rgba(255,255,255,0.06); transform: translateY(-2px); }
+    .bb .it.buy.owned { opacity: .38; cursor: default; }
+    .bb .it.buy.owned:hover { background: none; transform: none; }
     .bb .it.buy.deal .pr { color: ${S.spectrum[3] || S.accent}; }
     .bb .it.buy.deal .pr { white-space: nowrap; }
     .bb .it.buy.deal .pr em { font-style: normal; font-size: 7px; letter-spacing: 0.12em; text-transform: uppercase; margin-left: 5px; padding-left: 5px; border-left: 1px solid rgba(255,255,255,0.35); opacity: .9; }
@@ -1687,13 +1689,13 @@ function ledger(pet, n, why) { pet.ledger = [{ at: Math.floor(Date.now() / 1000)
 // The shelf: a few things at a time, reshuffled every shopEvery minutes (seeded by the clock, so every refresh agrees), one of them half price.
 function shopNow(pet, now = Date.now()) {
   const every = Math.max(1, S.cute.shopEvery || 5) * 60000, slot = Math.floor(now / every);
-  const pool = ITEMS.filter((it) => !pet.drops.includes(it.id) && it.id !== "friend");   // friends aren't for sale
+  const pool = ITEMS.filter((it) => it.id !== "friend");   // friends aren't for sale. Owned things stay on the shelf as "yours": the shelf never changes mid-slot, buying included
   let seed = (slot * 2654435761) >>> 0;
   const rnd = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   const n = Math.max(1, S.cute.shopSize || 4), dealAt = S.cute.shopDeal === false ? -1 : slot % n;
-  const items = pool.slice(0, n).map((it, i) => (i === dealAt ? { ...it, price: Math.ceil(it.price / 2), was: it.price, deal: true } : { ...it, deal: false }));
-  return { items, left: pool.length, until: (slot + 1) * every };
+  const items = pool.slice(0, n).map((it, i) => ({ ...(i === dealAt ? { ...it, price: Math.ceil(it.price / 2), was: it.price, deal: true } : { ...it, deal: false }), owned: pet.drops.includes(it.id) }));
+  return { items, left: pool.filter((it) => !pet.drops.includes(it.id)).length, until: (slot + 1) * every };
 }
 function buyItem(id) {   // click in the shop (inside the chest)
   const pet = memory.pet, it = ITEMS.find((x) => x.id === id);
@@ -1990,8 +1992,8 @@ function ChestCard({ stored, hidden, pet, view }) {   // the window the chest op
                 {!hatched ? <div className="empty">the shop opens when the egg hatches.</div>
                   : shop.length ? (
                     <div className="items">{shop.map((it) => (
-                      <div className={"it buy" + (it.deal ? " deal" : "")} key={it.id} title={`${it.line} · ${it.price} coins${it.deal ? ` (was ${it.was})` : ""}`} onClick={() => buyItem(it.id)}>
-                        <div className="sp">{sprite(it)}</div><b>{it.name}</b><i className={"pr" + (coins >= it.price ? " ok" : "")}>{it.price}{it.deal ? <em>sale</em> : null}</i>
+                      <div className={"it buy" + (it.deal ? " deal" : "") + (it.owned ? " owned" : "")} key={it.id} title={it.owned ? `${it.name} · yours` : `${it.line} · ${it.price} coins${it.deal ? ` (was ${it.was})` : ""}`} onClick={() => { if (!it.owned) buyItem(it.id); }}>
+                        <div className="sp">{sprite(it)}</div><b>{it.name}</b>{it.owned ? <i className="pr">yours</i> : <i className={"pr" + (coins >= it.price ? " ok" : "")}>{it.price}{it.deal ? <em>sale</em> : null}</i>}
                       </div>))}
                     </div>
                   ) : <div className="empty">sold out. you own it all.</div>}
