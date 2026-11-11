@@ -1692,9 +1692,15 @@ function shopNow(pet, now = Date.now()) {
   const pool = ITEMS.filter((it) => it.id !== "friend");   // friends aren't for sale. Owned things stay on the shelf as "yours": the shelf never changes mid-slot, buying included
   let seed = (slot * 2654435761) >>> 0;
   const rnd = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  const n = Math.max(1, S.cute.shopSize || 4), dealAt = S.cute.shopDeal === false ? -1 : slot % n;
-  const items = pool.slice(0, n).map((it, i) => ({ ...(i === dealAt ? { ...it, price: Math.ceil(it.price / 2), was: it.price, deal: true } : { ...it, deal: false }), owned: pet.drops.includes(it.id) }));
+  // weighted draw: trinkets most shelves, gear often, flex sometimes, a grail (500+) maybe twice a day. Same seed, same shelf.
+  const weight = (it) => it.price >= 500 ? 0.05 : it.price >= 250 ? 0.25 : it.price >= 60 ? 0.6 : 1;
+  const n = Math.max(1, S.cute.shopSize || 4), dealAt = S.cute.shopDeal === false ? -1 : slot % n, picks = [], bag = pool.slice();
+  while (picks.length < n && bag.length) {
+    let r = rnd() * bag.reduce((a, it) => a + weight(it), 0), k = 0;
+    while (k < bag.length - 1 && (r -= weight(bag[k])) > 0) k++;
+    picks.push(bag[k]); bag.splice(k, 1);
+  }
+  const items = picks.map((it, i) => ({ ...(i === dealAt ? { ...it, price: Math.ceil(it.price / 2), was: it.price, deal: true } : { ...it, deal: false }), owned: pet.drops.includes(it.id) }));
   return { items, left: pool.filter((it) => !pet.drops.includes(it.id)).length, until: (slot + 1) * every };
 }
 function buyItem(id) {   // click in the shop (inside the chest)
