@@ -83,6 +83,42 @@ def git(repo, *args):
         return ""
 
 
+CODE_EXT = {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".swift", ".go", ".rs", ".java", ".kt", ".rb", ".php",
+            ".c", ".cc", ".cpp", ".h", ".m", ".mm", ".cs", ".sh", ".zsh", ".sql", ".html", ".css", ".scss", ".vue",
+            ".svelte", ".lua", ".dart", ".applescript", ".ex", ".exs", ".zig", ".nim"}
+SKIP_DIRS = ("node_modules/", ".claude/", "docs/", "notes/", "vendor/", "dist/", "build/", ".next/")
+
+
+def is_code(path):
+    """A source file: how the pet tells shipped code from plans, notes and CLAUDE.md edits."""
+    if any(part in path for part in SKIP_DIRS):
+        return False
+    return os.path.splitext(path)[1].lower() in CODE_EXT
+
+
+def has_code(repo):
+    files = git(repo, "ls-files").split("\n") if os.path.isdir(os.path.join(repo, ".git")) else []
+    if not files or files == [""]:
+        files = []
+        for root, dirs, names in os.walk(repo):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "node_modules"]
+            files += [os.path.relpath(os.path.join(root, n), repo) for n in names]
+            if len(files) > 2000:
+                break
+    return any(is_code(f) for f in files)
+
+
+def code_commits_today(repo):
+    """Commits since midnight that touch at least one source file."""
+    out = git(repo, "log", "--since=midnight", "--format=%x00%H", "--name-only")
+    n = 0
+    for block in out.split("\x00")[1:]:
+        lines = block.strip().split("\n")[1:]
+        if any(is_code(f) for f in lines if f):
+            n += 1
+    return n
+
+
 def git_info(repo):
     if not os.path.isdir(os.path.join(repo, ".git")):
         return {}
@@ -97,7 +133,8 @@ def git_info(repo):
     first = int(first[0]) if first else int(ts)
     dates = set(git(repo, "log", "--since=120.days", "--format=%cd", "--date=short").split())
     return {"isRepo": True, "commitAt": int(ts), "commitMsg": msg, "firstCommitAt": first,
-            "commitsWeek": sum(days[-7:]), "commitsToday": days[-1], "days": days, "dates": sorted(dates)}
+            "commitsWeek": sum(days[-7:]), "commitsToday": days[-1], "codeCommitsToday": code_commits_today(repo),
+            "days": days, "dates": sorted(dates)}
 
 
 def summarize(steps):
@@ -130,7 +167,7 @@ def scan():
                 if got:
                     break
             info = git_info(path)
-            entry = {"id": name, "name": name, "path": path, "ok": True, "hasPlan": bool(plan)}
+            entry = {"id": name, "name": name, "path": path, "ok": True, "hasPlan": bool(plan), "code": has_code(path)}
             entry.update(summarize(steps))
             entry.update(info)
             st = os.stat(path)
@@ -201,6 +238,7 @@ def main():
     result = {"generatedAt": int(time.time()), "projects": projects}
     result["screens"] = screens()
     result["today"] = sum(p.get("commitsToday", 0) for p in projects)
+    result["todayCode"] = sum(p.get("codeCommitsToday", 0) for p in projects if p.get("code"))   # what the pet gets paid for
     result["activeToday"] = sum(1 for p in projects if p.get("commitsToday"))
     result["streak"] = streak(set().union(*[set(p.pop("dates", [])) for p in projects]))
     try:

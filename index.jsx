@@ -1372,7 +1372,8 @@ function buildCloset(fly, bb, wrap) {   // stats, the shop, what's collected
     ? `<span>feels</span><b style="grid-column: 2 / -1">${esc(feelsLine)}</b>` + row("body", esc(v.stageWord)) +   /* feels gets the whole row: "a ghost. fading" doesn't fit a half */
       row("ate today", `${v.today} step${v.today === 1 ? "" : "s"}`) +
       row("wallet", `${coins} coin${coins === 1 ? "" : "s"}`) + row("stuff", `${owned.length} of ${ITEMS.length}`) +
-      row("finished", `${pet.trophies.length} project${pet.trophies.length === 1 ? "" : "s"}`) + row("steps so far", `${pet.steps}`)
+      row("finished", `${pet.trophies.length} project${pet.trophies.length === 1 ? "" : "s"}`) + row("steps so far", `${pet.steps}`) +
+      (pet.ledger || []).slice(0, 6).map((e) => row(e.n > 0 ? `+${e.n}` : `${e.n}`, esc(e.why))).join("")
     : row("inside", pet.steps ? "something's moving" : "quiet so far") + row("laid", esc(pet.born)) +
       row("wallet", `${coins} coins`) + row("warm", "yes");
   const sprite = (it) => pxHTML(it.proc && !it.grid ? wearPreview(it) : it.grid, 3);   // things at 3x so you can tell what they are
@@ -1461,7 +1462,7 @@ function petDies(pet, all, now) {   // permadeath: a stone in the graveyard, the
 function newPet(all) {
   const seen = {}; all.forEach((p) => { if (p.ok) seen[p.id] = p.done || 0; });
   return { born: dayKey(), plaque: all.reduce((n, p) => n + (p.done || 0), 0), seen, days: {}, steps: 0,
-           drops: [], trophies: [], pushDays: {}, snack: null, late: "", shinyUntil: 0, coins: 0, log: [], graveyard: [], friends: [], dizzy: 0 };
+           drops: [], trophies: [], pushDays: {}, snack: null, late: "", shinyUntil: 0, coins: 0, log: [], graveyard: [], friends: [], dizzy: 0, paid: { ...seen }, ledger: [] };
 }
 function savePet() {
   if (!memory.pet) return;
@@ -1606,31 +1607,37 @@ function pickBit(pet, now) {   // maybe start a bit: pet or friend does somethin
 }
 function petTick(data, all, now) {   // once per refresh: credit new steps, drop treats, build the view
   if (!S.cute.pet || !data) return null;
+  const onDisk = data.pet && data.pet.born ? data.pet : null, diskJson = onDisk ? JSON.stringify(onDisk) : "";
   if (!memory.pet) {
-    const saved = data.pet && data.pet.born ? data.pet : null;
-    memory.pet = saved || newPet(all);
-    memory.petSaved = saved ? JSON.stringify(saved) : "";
+    memory.pet = onDisk || newPet(all);
+    memory.petSaved = diskJson;
+  } else if (onDisk && diskJson !== memory.petSaved) {   // the file changed under us (an edit by hand, the MCP): the file wins, never the stale copy in memory
+    memory.pet = onDisk; memory.petSaved = diskJson;
   }
   const pet = memory.pet, today = dayKey();
   let credit = 0;
+  pet.paid = pet.paid || {};   // the most steps ever paid for, per project: a plan rewrite that unticks and reticks pays nothing twice
+  const credits = [];
   all.forEach((p) => {
     if (!p.ok) return;
-    const prev = pet.seen[p.id];
-    if (prev !== undefined && p.done > prev) credit += p.done - prev;
-    pet.seen[p.id] = p.done || 0;
+    const prev = pet.seen[p.id], done = p.done || 0, top = pet.paid[p.id] !== undefined ? pet.paid[p.id] : prev;
+    if (prev !== undefined && done > top && p.code) { credit += done - top; credits.push({ id: p.id, n: done - top }); }   // only projects with a codebase pay
+    pet.seen[p.id] = done;
+    pet.paid[p.id] = prev === undefined ? done : Math.max(top, done);
   });
   if (credit) {
     const was = pet.steps;
     pet.steps += credit; pet.days[today] = (pet.days[today] || 0) + credit;
     for (let i = 0; i < credit; i++) if (Math.random() < 0.05) { pet.shinyUntil = now + 3600; queueLine("ooh. shiny."); }
     if (was < S.cute.hatchAt && pet.steps >= S.cute.hatchAt) { memory.hatchAt = now; play(S.cute.hatchSound); queueLine("…hi."); }
-    earn(pet, credit * (S.cute.coins.step || 0), `+${credit * (S.cute.coins.step || 0)} coins`);
+    credits.forEach((c) => earn(pet, c.n * (S.cute.coins.step || 0), null, `${c.n} step${c.n === 1 ? "" : "s"} · ${c.id}`));
+    queueLine(`+${credit * (S.cute.coins.step || 0)} coins`);
   }
-  // coins for commits: data.today is every commit today across the repos; pay for the ones not paid yet
-  const tc = data.today || 0;
+  // coins for commits: data.todayCode is every commit today that touched source, across the code repos; pay for the ones not paid yet
+  const tc = data.todayCode || 0;
   // seen never beats today's real count: a squash or amend lowers the count, and the next commit must still pay
   const seen = Math.min(tc, pet.commitsSeen && pet.commitsSeen.day === today ? pet.commitsSeen.n : 0);
-  if (tc > seen) earn(pet, (tc - seen) * (S.cute.coins.commit || 0), `+${(tc - seen) * (S.cute.coins.commit || 0)} coins for committing`);
+  if (tc > seen) earn(pet, (tc - seen) * (S.cute.coins.commit || 0), `+${(tc - seen) * (S.cute.coins.commit || 0)} coins for committing`, `${tc - seen} commit${tc - seen === 1 ? "" : "s"}`);
   pet.commitsSeen = { day: today, n: Math.max(seen, tc) };
   if (pet.steps >= S.cute.hatchAt && S.cute.diesAfterDays && idleDays(pet, now) >= S.cute.diesAfterDays) petDies(pet, all, now);
   else if (pet.steps >= S.cute.hatchAt) pickBit(pet, now);
@@ -1654,10 +1661,11 @@ function petTrophy(name, now) {   // a project just hit 100%
   const pet = memory.pet; if (!pet) return;
   pet.trophies.unshift({ name, at: now }); pet.trophies = pet.trophies.slice(0, 20);
   queueLine(`${name}. done. framed. +${S.cute.coins.project || 0} coins.`);
-  pet.coins = (pet.coins || 0) + (S.cute.coins.project || 0);
+  earn(pet, S.cute.coins.project || 0, null, `finished · ${name}`);
   savePet();
 }
-function earn(pet, n, line) { if (n > 0) { pet.coins = (pet.coins || 0) + n; if (line) queueLine(line); } }
+function earn(pet, n, line, why) { if (n > 0) { pet.coins = (pet.coins || 0) + n; ledger(pet, n, why || line); if (line) queueLine(line); } }
+function ledger(pet, n, why) { pet.ledger = [{ at: Math.floor(Date.now() / 1000), n, why: why || "" }, ...(pet.ledger || [])].slice(0, 80); }
 // The shelf: a few things at a time, reshuffled every shopEvery minutes (seeded by the clock, so every refresh agrees), one of them half price.
 function shopNow(pet, now = Date.now()) {
   const every = Math.max(1, S.cute.shopEvery || 5) * 60000, slot = Math.floor(now / every);
@@ -1675,7 +1683,7 @@ function buyItem(id) {   // click in the shop (inside the chest)
   const offer = shopNow(pet).items.find((x) => x.id === id), price = offer ? offer.price : it.price;
   if ((pet.coins || 0) < price) { play(S.cute.petMadSound, undefined, 1.3); say(`${price - (pet.coins || 0)} more coins.`, 1800); return; }
   const now = Math.floor(Date.now() / 1000);
-  pet.coins -= price;
+  pet.coins -= price; ledger(pet, -price, `bought · ${it.name}`);
   pet.drops.push(id); pet.log.unshift({ id, at: now }); pet.log = pet.log.slice(0, 40);
   memory.dropAt = now; memory.unbox = { id, at: Date.now() }; play(S.cute.treatSound);
   const eq = equipOf(pet);
@@ -2055,7 +2063,8 @@ function renderBoard({ output, error }) {
     const pushAt = data.lastPush ? data.lastPush.at : null;
     if (memory.pushSeen !== null && pushAt && pushAt !== memory.pushSeen && now - pushAt < 90) {
       play(S.cute.pushSound); petPush(now); memory.partyAt = Date.now();
-      if (memory.pet && S.cute.coins.push) earn(memory.pet, S.cute.coins.push, `+${S.cute.coins.push} coins for pushing`);
+      const pushed = data.projects.find((p) => p.id === data.lastPush.repo);
+      if (memory.pet && S.cute.coins.push && pushed && pushed.code) earn(memory.pet, S.cute.coins.push, `+${S.cute.coins.push} coins for pushing`, `push · ${pushed.id}`);
     }
     memory.pushSeen = pushAt;
   }
