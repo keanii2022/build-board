@@ -516,8 +516,8 @@ export function mountStage(canvas, model, opts = {}) {
     f.zDir = Math.random() < 0.5 ? 1 : -1;
   };
   const pickMode = (f, tNow) => {
-    const r = Math.random();
-    if (r < 0.4) { pickTarget(f); f.mode = "wander"; f.arrive = "pause"; }
+    const r = Math.random(), pester = 0.35 / Math.max(1, st.friends.length);   // a crowd shares the pestering: four friends bug him as often as one would
+    if (r < 0.75 - pester) { pickTarget(f); f.mode = "wander"; f.arrive = "pause"; }
     else if (r < 0.75) { f.mode = "pester"; f.phase = "approach"; f.bumps = 2 + Math.floor(Math.random() * 2); f.bumped = 0; }
     else startZoomies(f, tNow, 1 + Math.floor(Math.random() * 2));
   };

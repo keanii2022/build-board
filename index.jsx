@@ -462,7 +462,11 @@ function mountStageIn(canvas, host) {   // first time: load three and build him;
       memory.stageLoading = false;
       if (!memory.stageOpen || memory.stageCtrl) return;
       memory.stageCtrl = mountStage(canvas, m.body, { pupils: m.pupils, accent: S.spectrum[1] || S.accent, roll: memory.view.stage >= 5,
-        onBug: () => { if (Math.random() < 0.7) say(BUG_LINES[Math.floor(Math.random() * BUG_LINES.length)], 2000); },
+        onBug: () => {   // friends bump him all day; he only comments now and then, and never over a bubble that's still up
+          const t = Date.now();
+          if (memory.sayT || t - (memory.bugSaidAt || 0) < 45000 || Math.random() < 0.5) return;
+          memory.bugSaidAt = t; say(BUG_LINES[Math.floor(Math.random() * BUG_LINES.length)], 2000);
+        },
         onDizzy: () => { say(DIZZY_LINES[Math.floor(Math.random() * DIZZY_LINES.length)], 2600); play(S.cute.petMadSound, undefined, 0.6);
           if (memory.pet) { memory.pet.dizzy = (memory.pet.dizzy || 0) + 1; savePet(); checkFriends(memory.pet, memory.data, memory.view, Math.floor(Date.now() / 1000)); } } });
       memory.stageKey = m.key;
@@ -1481,7 +1485,7 @@ function say(line, ms) {   // a bubble by his head: pops in crooked, types itsel
   let i = 0; const step = Math.max(14, Math.min(34, 900 / line.length));   // long lines type faster
   memory.typeT = setInterval(() => { i++; el.textContent = line.slice(0, i); if (i >= line.length) clearInterval(memory.typeT); }, step);
   const hold = (ms || 2600) + Math.min(1200, line.length * step);
-  memory.sayT = setTimeout(() => { el.classList.add("bye"); memory.sayT = setTimeout(() => el.classList.remove("show", "bye"), 450); }, hold);
+  memory.sayT = setTimeout(() => { el.classList.add("bye"); memory.sayT = setTimeout(() => { el.classList.remove("show", "bye"); memory.sayT = null; }, 450); }, hold);
   speak(line);
 }
 const BUG_LINES = ["stop it.", "not now.", "it's doing the thing again.", "i was busy.", "ok. ok. i see you.", "why are you like this.", "personal space."];
