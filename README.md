@@ -48,7 +48,7 @@ A `.skip` file next to `board.py` (one folder name per line) keeps a folder off 
 - Hover a project's steps pill (`7 / 16`) to see its steps. Click a project to open a Claude Code session in it.
 - Hover a sparkline for each day's commit count.
 - Drag a project's icon onto the chest to store it. Drag it back up to put it on the board.
-- Tick steps and commit to feed the pet and earn coins. Spend them in the chest's shop. Push to throw a party.
+- Tick steps and commit to feed the pet and earn coins: only projects with source files count, only commits that touch source, and a step pays once however often a plan gets rewritten. The stats card keeps a ledger. Spend coins in the chest's shop. Push to throw a party.
 
 ## Push party
 
