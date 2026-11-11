@@ -128,6 +128,7 @@ const SETTINGS = {
   // ── Clicks ────────────────────────────────────────────────────────────────
   lock: { idleMinutes: 10, onOpen: true, reset: false },   // two passwords, set when first asked, kept hashed in this widget's own storage, never in a file: a quick one (idle lock after idleMinutes, 0 = never; before any project opens; the lock button) and a company one (shift-click or double-click the lock button; only it opens that lock, and it opens the quick lock too). reset: true forgets both on the next refresh
   lockInPrompt: "/step",     // the LOCK IN button: a random project from the board opens in Claude Code with this already typed. "" = just open it
+  helpPrompt: "Help with the Build Board widget, this folder. Read README.md and run git status, then ask me what's bugging me or what to improve.",   // the HELP pill: a fresh Claude Code chat inside the widget's own folder
   clickOpens: "claude",       // "claude" = a new Claude Code session in that folder. "editor" = the app below. "" = nothing.
   openWith: "Visual Studio Code",
   boardUrl: "https://github.com/keanii2022",   // opens when you click the title (your GitHub)
@@ -301,6 +302,13 @@ function LockPad() {
       </div>
     </div>
   );
+}
+function helpChat() {   // the HELP pill: Claude Code opens in this widget's folder, so bugs and ideas have a home that isn't some other project's chat
+  guarded(() => {
+    say("ok. what's broken.", 2000); play(S.cute.clickSound);
+    const q = "&prompt=" + encodeURIComponent(S.helpPrompt || "") + "&source=build-board";
+    run(`${FIND_DIR}; open "claude://code/new?folder=$(printf %s "$W" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read()))')${q}"`);
+  }, "help");
 }
 function openPath(p, prompt) {
   if (!S.clickOpens || !p) return;
@@ -956,6 +964,7 @@ function styles(busy) {
     .bb-lockbtn { position: absolute; left: 68px; bottom: 7px; z-index: 3; display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px 4px 7px; border-radius: 999px; line-height: 0;
       border: 1px solid rgba(255,255,255,0.14); color: ${S.text}; opacity: .7; cursor: pointer; user-select: none; -webkit-user-select: none; transition: opacity .2s, background .2s, transform .2s; }
     .bb-lockbtn b { font-size: 8.5px; font-weight: 600; letter-spacing: .14em; line-height: 1; }
+    .bb-lockbtn.bb-help { left: 146px; padding: 4px 9px; }
     .bb-lockbtn:hover { opacity: 1; background: rgba(255,255,255,0.08); transform: translateY(-1px); }
     @keyframes bb-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
     .bb-proj { position: relative; }
@@ -2173,6 +2182,8 @@ function renderBoard({ output, error }) {
       <span className="bb-refresh" onClick={(e) => { e.stopPropagation(); refreshWidget(); }} onMouseDown={(e) => e.stopPropagation()} title="reload the widget">↻</span>
       <span className="bb-lockbtn" onClick={(e) => { e.stopPropagation(); lockNow(e.shiftKey); }} onDoubleClick={(e) => { e.stopPropagation(); lockNow(true); }} onMouseDown={(e) => e.stopPropagation()}
             title="lock · shift-click or double-click: lock for company"><Px rows={LOCK_PX} s={1.5} /><b>LOCK</b></span>
+      <span className="bb-lockbtn bb-help" onClick={(e) => { e.stopPropagation(); helpChat(); }} onMouseDown={(e) => e.stopPropagation()}
+            title="a Claude Code chat in the widget's own folder: bugs, ideas, tweaks"><b>HELP</b></span>
       <span className="bb-edge" onMouseDown={(e) => startResize(e, "w")} title="drag for width" />
       <span className="bb-edge l" onMouseDown={(e) => startResize(e, "l")} title="drag for width" />
       <span className="bb-grip l" onMouseDown={(e) => startResize(e, "lh")} onDoubleClick={resetSize} title="drag to resize · double-click to reset" />
