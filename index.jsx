@@ -92,7 +92,7 @@ const SETTINGS = {
     fedAt: 2,                  // steps in a day to count as fed. 1 = peckish, 0 = hungry, two days of 0 = ghost
     diesAfterDays: 5,          // days without a single step and it dies: new egg, coins and things gone, a stone in the graveyard. 0 = immortal
     stuffedAt: 5,              // steps in a day that leave it stuffed and sleepy. Keep that up and it gets fat.
-    coins: { step: 3, commit: 2, push: 5, project: 18 },
+    coins: { step: 3, commit: 2, push: 5, project: 100 },
   noCoins: ["build-board"],   // on the board, but never paid: work on the widget itself isn't the work   // what the pet earns: per step ticked, per commit, per push, per project at 100%
     shopEvery: 5,              // minutes: the shop shows a new shelf this often
     shopSize: 4,               // things on the shelf at a time
