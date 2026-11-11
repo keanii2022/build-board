@@ -307,7 +307,8 @@ function helpChat() {   // the HELP pill: Claude Code opens in this widget's fol
   guarded(() => {
     say("ok. what's broken.", 2000); play(S.cute.clickSound);
     const q = "&prompt=" + encodeURIComponent(S.helpPrompt || "") + "&source=build-board";
-    run(`${FIND_DIR}; open "claude://code/new?folder=$(printf %s "$W" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read()))')${q}"`);
+    const pd = (S.projectsDir || "~/Projects").replace(/^~/, "$HOME"), link = `[ -d "${pd}/build-board" ] && W="${pd}/build-board"`;   // a symlink in the projects folder puts the widget on its own board; prefer that path, it's what the app knows
+    run(`${FIND_DIR}; ${link}; open "claude://code/new?folder=$(printf %s "$W" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read()))')${q}"`);
   }, "help");
 }
 function openPath(p, prompt) {
@@ -964,7 +965,7 @@ function styles(busy) {
     .bb-lockbtn { position: absolute; left: 68px; bottom: 7px; z-index: 3; display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px 4px 7px; border-radius: 999px; line-height: 0;
       border: 1px solid rgba(255,255,255,0.14); color: ${S.text}; opacity: .7; cursor: pointer; user-select: none; -webkit-user-select: none; transition: opacity .2s, background .2s, transform .2s; }
     .bb-lockbtn b { font-size: 8.5px; font-weight: 600; letter-spacing: .14em; line-height: 1; }
-    .bb-lockbtn.bb-help { left: 146px; padding: 4px 9px; }
+    .bb-lockbtn.bb-help { left: 146px; height: 22px; padding: 0 9px; box-sizing: border-box; }   /* same height as LOCK, which gets its height from the icon */
     .bb-lockbtn:hover { opacity: 1; background: rgba(255,255,255,0.08); transform: translateY(-1px); }
     @keyframes bb-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
     .bb-proj { position: relative; }
