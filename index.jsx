@@ -288,7 +288,7 @@ function LockPad() {
   };
   return (
     <div className={"bb-lock" + (P.err ? " err" : "")} onClick={(e) => { e.stopPropagation(); const i = e.currentTarget.querySelector("input"); if (i) i.focus(); }}
-         onMouseDown={(e) => e.stopPropagation()} onMouseMove={(e) => e.stopPropagation()}>
+         onMouseDown={(e) => e.stopPropagation()}>   {/* never stop mousemove here: Übersicht watches it bubble to window to know the mouse is over a widget; stopping it makes clicks and keys fall through to the desktop */}
       <div className="bb-lock-card">
         <div className="t">{title}</div>
         <input className="bb-lock-in" type="password" placeholder="password" autoComplete="off" spellCheck={false} ref={focusLock} onKeyDown={onKey} onInput={onInput} onMouseDown={(e) => e.stopPropagation()} />
