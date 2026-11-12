@@ -110,21 +110,44 @@ def tick_tools_json(n, status):
 
 
 def tick_plan(path, n, status):
-    """A repo's PLAN.md: flip the checkbox on '- [ ] **Step N: …**', or the '**Status:**' line under '### N. …'."""
-    plan = next((os.path.join(path, f) for f in ("PLAN.md", "docs/PLAN.md") if os.path.isfile(os.path.join(path, f))), None)
+    """A repo's PLAN.md. Steps are '- [ ] **Step N: …**' checkboxes or '### N. Title' headings, with or without a
+       Status line underneath. Done: tick the box, write **Status:** done, and the next open step becomes current."""
+    plan = next((os.path.join(path, f) for f in ("PLAN.md", "docs/PLAN.md", "notes/PLAN.md") if os.path.isfile(os.path.join(path, f))), None)
     if not plan: return False
     text = open(plan, encoding="utf-8").read()
-    box = re.compile(r"^- \[([ xX])\] \*\*Step " + re.escape(n) + r":", re.M)
-    if box.search(text):
-        text = box.sub(lambda m: f"- [{'x' if status == 'done' else ' '}] **Step {n}:", text, count=1)
-    else:
-        head = re.search(r"^### " + re.escape(n) + r"\. .*$", text, re.M)
-        if not head: return False
-        rest = text[head.end():]
-        st = re.search(r"\*\*Status:\*\*\s*[a-z-]+", rest)
-        if not st: return False
-        rest = rest[:st.start()] + f"**Status:** {status if status == 'done' else 'current'}" + rest[st.end():]
-        text = text[:head.end()] + rest
+    head = re.compile(r"^(?:- \[[ xX]\] \*\*Step ([^:*]+):|#{2,3} ([A-Za-z]{0,2}[0-9]+[a-z0-9]*(?:\.[0-9]+)?)\. )", re.M)
+    status_line = re.compile(r"^([ \t]*(?:[-*][ \t]+)?)\**Status\**:?\**:?[ \t]*\**([A-Za-z][A-Za-z-]*)\**", re.M)
+    later = re.search(r"^## (?:Later|Parked)\b", text, re.M)
+    heads = [h for h in head.finditer(text) if not later or h.start() < later.start()]
+    blocks = [(h, text[h.start():(heads[i + 1].start() if i + 1 < len(heads) else len(text))]) for i, h in enumerate(heads)]
+    idx = next((i for i, (h, _) in enumerate(blocks) if (h.group(1) or h.group(2)).strip() == n), None)
+    if idx is None: return False
+
+    def set_block(block, word):
+        box = re.match(r"- \[[ xX]\]", block)
+        if box: block = f"- [{'x' if word == 'done' else ' '}]" + block[box.end():]
+        m = status_line.search(block)
+        if m: block = block[:m.start()] + f"{m.group(1)}**Status:** {word}" + block[m.end():]
+        return block
+
+    def word_of(block):
+        m = status_line.search(block)
+        if m: return m.group(2).lower()
+        return "done" if re.match(r"- \[[xX]\]", block) else "pending"
+
+    out = [blk for _, blk in blocks]
+    out[idx] = set_block(out[idx], "done" if status == "done" else "current")
+    if status == "done":   # hand the baton to the next open step, and only one step is current
+        nxt = next((i for i in range(idx + 1, len(out)) if word_of(out[i]) != "done"), None)
+        for i in range(len(out)):
+            if i == idx: continue
+            w = word_of(out[i])
+            if i == nxt and w != "current": out[i] = set_block(out[i], "current")
+            elif i != nxt and w == "current" and not re.match(r"- \[[xX]\]", out[i]): out[i] = set_block(out[i], "not-started")
+    else:   # undone: this step is current again, later steps that were current go back to not started
+        for i in range(idx + 1, len(out)):
+            if word_of(out[i]) == "current": out[i] = set_block(out[i], "not-started")
+    text = text[:blocks[0][0].start()] + "".join(out) + text[blocks[-1][0].start() + len(blocks[-1][1]):]
     open(plan, "w", encoding="utf-8").write(text)
     return True
 

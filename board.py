@@ -42,6 +42,8 @@ def stop_at_later(text):
 
 
 STEP_HEAD = re.compile(r"^(?:#{2,3} ([A-Za-z]{0,2}[0-9]+[a-z0-9]*(?:\.[0-9]+)?)\. (.+)|- \[([ xX])\] \*\*Step ([^:*]+): ([^*]+)\*\*|#{2,3} Step ([0-9][0-9.]*)\s*[—:–-]\s*(.+))", re.M)
+# "**Status:** done", "**Status**: done", "- Status: done", "Status: done": bold or not, bullet or not
+STATUS_LINE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?\**Status\**:?\**:?[ \t]*\**([A-Za-z][A-Za-z-]*)", re.M)
 DONE_WORDS = re.compile(r"\b(done|complete|completed|shipped|finished)\b|✓|✅", re.I)
 
 
@@ -57,10 +59,11 @@ def parse_plan(text):
     for i, h in enumerate(heads):
         end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
         body = text[h.start():end]
-        sm = re.search(r"\*\*Status:\*\*\s*([a-z-]+)", body)
+        sm = STATUS_LINE.search(body)
         if sm:
             any_status = True
-            status = sm.group(1) if sm.group(1) in ("done", "current") else "pending"
+            word = sm.group(1).lower()
+            status = "done" if word == "done" else "current" if word in ("current", "doing", "in-progress", "active") else "pending"
         elif h.group(6):
             status = "done" if DONE_WORDS.search(h.group(7)) else "pending"
         else:
