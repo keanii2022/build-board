@@ -29,13 +29,13 @@ Look: Y2K Frutiger Aero glass, light in light mode and dark in dark mode (follow
 - **Out of scope:** live status, hooks, chat, vibe/story/catchphrase (not shown)
 
 ### 5. Live status hook
-- **Status:** current
+- **Status:** done
 - **Scope:** `crew-hook.py` in this repo, wired into `~/.claude/settings.json` on SubagentStart/SubagentStop. Writes `.crew.json` in the widget folder (gitignored): who, which project (from cwd), started, ended, done/failed/stuck per step 2's rules, plus a short history per agent. `server.py` gets a `crew` MCP tool ("who's working?").
 - **Dependencies:** 2
 - **Out of scope:** widget UI
 
 ### 6. Live buddy list
-- **Status:** not-started
+- **Status:** current
 - **Scope:** `index.jsx` reads `.crew.json`. Working agents move up to "In the Office" with their status pose and a project tag. Idle agents sit in "Away" as small chips. A status line like "done w/ cli-tool icons · 4m ago" so the crew feels like a team that's been working with you.
 - **Dependencies:** 4, 5
 - **Out of scope:** chat, hook script

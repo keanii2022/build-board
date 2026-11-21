@@ -1,5 +1,8 @@
 # per-machine state the widget writes
 .pet.json
+.crew.json
+.crew.json.lock
+.crew.*.tmp
 .last-push
 .skip
 __pycache__/

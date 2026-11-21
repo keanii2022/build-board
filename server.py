@@ -9,6 +9,7 @@ Tools:
   board              what the desktop widget sees: every project, progress, next step
   steps  project     one project's full step list
   tick   project n   mark a step done (or undo it). The widget shows it on its next refresh
+  crew               who's working right now, on what project, and how each agent's last job went
 
 Register once (then open a new Claude Code chat):
   claude mcp add -s user build-board -- python3 "$HOME/Library/Application Support/Übersicht/widgets/build-board/server.py"
@@ -60,6 +61,23 @@ def ago(ts):
 
 
 # ── tools ───────────────────────────────────────────────────────────────────
+def tool_crew(args):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("crew_hook", os.path.join(HERE, "crew-hook.py"))
+    ch = importlib.util.module_from_spec(spec); spec.loader.exec_module(ch)
+    roster = ch.roster()
+    if not roster: return "Nobody's run yet. The crew shows up here once an agent starts."
+    lines = []
+    for who, a in sorted(roster.items(), key=lambda kv: (kv[1]["status"] not in ("working", "stuck"), kv[0])):
+        for r in a["runs"]:
+            lines.append(f'{who}: {r["status"]} on {r["project"]}' + (f' ({r["task"]})' if r.get("task") else "") + f' · started {ago(r["started"])}')
+        if not a["runs"] and a.get("last"):
+            r = a["last"]
+            why = f' ({r["reason"]})' if r.get("reason") else ""
+            lines.append(f'{who}: {r["status"]}{why} w/ {r.get("task") or "a job"} on {r["project"]} · {ago(r["ended"])}')
+    return "\n".join(lines)
+
+
 def tool_board(args):
     d = board_data()
     lines = [summary_line(p) for p in d["projects"]]
@@ -155,6 +173,8 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {"project": {"type": "string", "description": "project id or name, e.g. approval-desk or tools"}}, "required": ["project"]}, "fn": tool_steps},
     {"name": "tick", "description": "Mark a project's step done (writes its PLAN.md or tools.json). undo=true puts it back. The desktop widget shows it on the next refresh.",
      "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "step": {"type": "string", "description": "the step number as shown by steps, e.g. \"3\""}, "undo": {"type": "boolean"}}, "required": ["project", "step"]}, "fn": tool_tick},
+    {"name": "crew", "description": "Who's working: each crew agent running right now (project, task, working or stuck) and how the others' last job went (done, failed, stopped). Call this for 'who's working?' / 'what's Hexx doing?'.",
+     "inputSchema": {"type": "object", "properties": {}}, "fn": tool_crew},
 ]
 
 
