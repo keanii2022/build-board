@@ -27,6 +27,7 @@ FRESH_DAYS = 7                        # a repo with no plan still shows if it ha
 PLAN_FILES = [f for f in os.environ.get("BOARD_PLANS", "").split(",") if f] or ["PLAN.md", "docs/PLAN.md", "notes/PLAN.md", "NOTES.md"]   # first one that has steps wins
 TOOLS_JSON = os.path.join(HERE, "tools.json")   # the hand-kept track with no repo
 PUSH_MARKER = os.path.join(HERE, ".last-push")  # a pre-push git hook writes the repo name here
+AGENTS_DIR = os.path.join(HOME, ".claude", "agents")   # one .md per crew member; the frontmatter is the roster
 
 
 def read(path):
@@ -198,11 +199,51 @@ def streak(dates):
     return n
 
 
+def frontmatter(text):
+    """The handful of YAML the agent files use: `key: value` lines and `key:` followed by `  - item` lists."""
+    if not text.startswith("---"):
+        return {}
+    block = text[3:].split("\n---", 1)[0]
+    out, key = {}, None
+    for line in block.splitlines():
+        m = re.match(r"^([A-Za-z_-]+):\s*(.*)$", line)
+        if m:
+            key, val = m.group(1), m.group(2).strip()
+            out[key] = [] if val == "" else val.strip('"').strip("'")
+        elif key and isinstance(out.get(key), list) and line.strip().startswith("- "):
+            out[key].append(line.strip()[2:].strip().strip('"').strip("'"))
+    return out
+
+
+def crew():
+    """Every agent in ~/.claude/agents: who they are, their role, and a few things to ask them."""
+    people = []
+    try:
+        files = sorted(f for f in os.listdir(AGENTS_DIR) if f.endswith(".md"))
+    except OSError:
+        return people
+    for f in files:
+        fm = frontmatter(read(os.path.join(AGENTS_DIR, f)))
+        if not fm.get("role"):
+            continue   # helpers without a role aren't crew
+        desc = fm.get("description", "") if isinstance(fm.get("description"), str) else ""
+        display = re.sub(r"\s*\(.*?\)", "", desc.split(",")[0]).strip() or fm.get("name", f[:-3])   # "C (Carmina), the Tester." -> "C"
+        examples = fm.get("examples") if isinstance(fm.get("examples"), list) else []
+        if not examples:
+            use = re.search(r"Use when (.+?)(?:\.|$)", desc)
+            examples = [use.group(1)] if use else []
+        people.append({"id": fm.get("name", f[:-3]), "name": display, "role": fm["role"],
+                       "crew": fm.get("crew", ""), "examples": examples[:3]})
+    return people
+
+
 def main():
     projects = scan() + [t for t in [tools_track()] if t]
     projects.sort(key=lambda p: p.get("activityAt", 0), reverse=True)
     result = {"generatedAt": int(time.time()), "projects": projects}
     result["screens"] = screens()
+    result["dir"] = os.path.basename(HERE)   # the widget's folder name, which is also its URL path on Übersicht's server
+    result["crew"] = crew()
     result["today"] = sum(p.get("commitsToday", 0) for p in projects)
     result["activeToday"] = sum(1 for p in projects if p.get("commitsToday"))
     result["streak"] = streak(set().union(*[set(p.pop("dates", [])) for p in projects]))

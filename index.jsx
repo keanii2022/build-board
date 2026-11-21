@@ -32,34 +32,15 @@ const SETTINGS = {
                                // Hover the header and click ⇄ to send it to the other display; it remembers that too.
                                // until you change `position` above, which snaps it back.
 
-  // ── Words ─────────────────────────────────────────────────────────────────
-  eyebrow: "BUILD BOARD",      // small blue label at the top. "" hides it.
-  title: "Projects",           // the heading. "" hides it.
-  titleGradientWord: "",       // a word in the title to paint with the spectrum, e.g. "Projects". "" = none.
-
-  // ── The spectrum: the colours every bar fills with, left to right ─────────
-  // A bar at 100% shows the whole run. Add, remove or reorder freely.
+  // ── Look ──────────────────────────────────────────────────────────────────
+  title: "Build Board",        // the top window's title bar. Click it to open boardUrl.
+  crewTitle: "Crew",           // the buddy list window. "" hides the crew.
+  crewOrder: ["hexx", "carmina", "mello", "jig", "sora", "maya", "mars", "neo", "big-bro", "benjamin"],   // buddy order; anyone not listed comes after
+  theme: "auto",               // "light", "dark", or "auto" (follows the Mac). The switch in the title bar overrides this and is remembered.
+  // The colours every bar fills with, left to right. A bar at 100% shows the whole run.
   spectrum: ["#2E7CF6", "#6A5BFF", "#B54CFF", "#F04AA6", "#FF7A45"],
-  accent: "#5B8DEF",           // eyebrow, "next" label, small links
-
-  // ── Panel ─────────────────────────────────────────────────────────────────
-  panel: "rgba(8, 8, 11, 0.93)",       // background of the glass panel: near black
-  edge: "rgba(255, 255, 255, 0.09)",   // 1px border
-  text: "#F4F2EF",
-  muted: "rgba(244, 242, 239, 0.55)",
-  track: "rgba(255, 255, 255, 0.08)",  // empty part of a bar
-  glass: 24,                   // blur behind the panel (0 = none)
-  radius: 18,
-  barHeight: 3,
-
-  // ── Motion ────────────────────────────────────────────────────────────────
-  // "activity": the panel breathes faster on days you commit; a project you
-  //             committed to today pulses quick, one from the last 48h pulses
-  //             slow, idle ones sit still.
-  // "soft":     everything breathes at one slow rate.   "off": no motion.
-  pulse: "activity",
-  pulseSeconds: 4,             // the slow breath. The quick one is half of this.
-  activeHours: 48,             // "recent" means a commit this recent
+  radius: 12,                  // window corners
+  activeHours: 48,             // a project with a commit this recent gets a slow pulse on its dot; today's commits pulse quick
 
   // ── Cute ──────────────────────────────────────────────────────────────────
   // Sounds are macOS's own (names from /System/Library/Sounds: Pop, Tink, Glass,
@@ -81,20 +62,15 @@ const SETTINGS = {
     hoverPitch: true,          // each project's hover pop has its own pitch, so you learn them by ear
     quietHours: null,          // e.g. [23, 8] = no sounds from 23:00 to 08:00. null = the little speaker at the bottom right decides
     sparkles: true,            // spectrum sparkles when a step lands (bigger burst at 100%)
-    bubbles: 7,                // bubbles drifting up the glass. 0 = none
-    streak: true,              // "🔥 4-day streak" in the today line
-    wiggle: true,              // rows lift, dots wiggle, pills pop on hover
+    streak: true,              // "4-day streak" in the today line
+    wiggle: true,              // rows nudge and dots wiggle on hover
+    jelly: true,               // drag the widget and the windows wobble like jelly, then spring back
   },
 
   // ── What shows ────────────────────────────────────────────────────────────
-  showToday: true,             // "3 commits today · 2 projects" under the title
-  showNext: true,              // "NEXT  5. Agent"
-  showActivity: true,          // "3 this week · 12h ago"
-  showSparkline: true,         // 14 tiny bars: commits per day, oldest left
-  hoverSteps: true,            // hover a project to see its full step list
-  stepsStyle: "flyout",        // "flyout": a card beside the widget, sized to fit the screen, scrolls, lands on the current step.
+  showToday: true,             // "3 commits today · 2 projects" under the title bar
+  hoverSteps: true,            // rest on a project to see its full step list in a card beside the widget
   flyInside: true,             // on a wide widget the card opens inside the panel (right edge) instead of beside it, so windows can't cover it
-                               // "dropdown": opens under the project (can run off the bottom of the screen).
 
   // ── Clicks ────────────────────────────────────────────────────────────────
   lock: { idleMinutes: 10, onOpen: true, reset: false },   // two passwords, set when first asked, kept hashed in this widget's own storage, never in a file: a quick one (idle lock after idleMinutes, 0 = never; before any project opens; the lock button) and a company one (shift-click or double-click the lock button; only it opens that lock, and it opens the quick lock too). reset: true forgets both on the next refresh
@@ -140,6 +116,39 @@ export const className = `
 
 const S = SETTINGS;
 const SPECTRUM = `linear-gradient(90deg, ${S.spectrum.join(", ")})`;
+
+// ── Theme: Light / Dark / Auto, Auto follows the Mac ────────────────────────
+const THEME_KEY = "build-board.theme";
+function themePick() { try { return localStorage.getItem(THEME_KEY) || S.theme || "auto"; } catch (e) { return S.theme || "auto"; } }
+function darkMac() { try { return window.matchMedia("(prefers-color-scheme: dark)").matches; } catch (e) { return true; } }
+function themeNow() { const p = themePick(); return p === "auto" ? (darkMac() ? "dark" : "light") : p; }
+function setTheme(e, pick) {
+  e.stopPropagation();
+  try { localStorage.setItem(THEME_KEY, pick); } catch (err) {}
+  play(S.cute.clickSound); redraw();
+}
+function watchMacTheme() {   // Auto flips the moment the Mac does, not on the next refresh
+  if (memory.themeWatch) return;
+  memory.themeWatch = true;
+  try { window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => redraw()); } catch (e) {}
+}
+function ThemeSwitch() {
+  const p = themePick();
+  const opt = (k, glyph, tip) => <span className={"o" + (p === k ? " on" : "")} onClick={(e) => setTheme(e, k)} onMouseDown={(e) => e.stopPropagation()} title={tip}>{glyph}</span>;
+  const sun = <svg width="9" height="9" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.4" fill="currentColor" /><g stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+    <path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M3 13l1.1-1.1M11.9 4.1L13 3" /></g></svg>;
+  const moon = <svg width="9" height="9" viewBox="0 0 16 16"><path d="M13.6 10.4A6 6 0 0 1 5.6 2.4a6 6 0 1 0 8 8z" fill="currentColor" /></svg>;
+  return <span className="bb-theme">{opt("light", sun, "light")}{opt("auto", "A", "auto: follows your Mac")}{opt("dark", moon, "dark")}</span>;
+}
+
+// ── The lil guy: sprite strips rendered by art/lilguy.py (8 frames, side by side) ─
+const LOOP = { icon: "1.2s", idle: "2.4s", working: "0.7s", done: "1s", failed: "1.4s", stuck: "1.4s" };
+function LilGuy({ who, pose, size, play: playing, className }) {
+  const dir = (memory.data && memory.data.dir) || "build-board";
+  const pt = size <= 24 ? 24 : size <= 32 ? 32 : 48;
+  return <span className={"lg" + (playing ? " play" : "") + (className ? " " + className : "")}
+               style={{ "--s": size + "px", "--d": LOOP[pose] || "1.2s", backgroundImage: `url(${dir}/art/${who}/${pose}-anim-${pt}@2x.png)` }} />;
+}
 const memory = { done: {}, bumpAt: {}, seen: null, arrivedAt: {}, pos: null, dragging: false, dragEndAt: 0,
                  full: {}, doneAt: {}, pushSeen: null, soundAt: 0, scale: 0, width: 0, height: 0, stepsById: {}, flyT: null,
                  pin: null, locked: false, lastActive: Date.now() };
@@ -465,6 +474,33 @@ function loadPos() {
   try { const v = localStorage.getItem(POS_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; }
 }
 function savePos(p) { memory.pos = p; try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch (e) {} }
+// ── Jelly: drag the widget and the windows lag, wobble and spring back ───────
+function jelly(wrap) {
+  if (!S.cute.jelly) return;
+  if (memory.jelly) { memory.jelly.wrap = wrap; return; }
+  const wins = [...wrap.querySelectorAll(".bb-win")];
+  if (!wins.length) return;
+  const J = memory.jelly = { wrap, last: wrap.getBoundingClientRect(), t: performance.now(),
+    bodies: wins.map((el, i) => ({ el, x: 0, y: 0, vx: 0, vy: 0, k: i ? 120 : 170 })) };   // the lower window is softer, so the two slosh out of step
+  const clamp = (v, m) => Math.max(-m, Math.min(m, v));
+  const step = (now) => {
+    const dt = Math.min(0.033, (now - J.t) / 1000); J.t = now;
+    const r = J.wrap.getBoundingClientRect(), dx = r.left - J.last.left, dy = r.top - J.last.top;
+    J.last = r;
+    let moving = memory.dragging;
+    for (const b of J.bodies) {
+      b.x = clamp(b.x - dx, 34); b.y = clamp(b.y - dy, 34);   // the gel stays put for a beat...
+      b.vx += (-b.k * b.x - 9 * b.vx) * dt; b.vy += (-b.k * b.y - 9 * b.vy) * dt;   // ...then springs home, overshooting a little
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      if (Math.abs(b.x) + Math.abs(b.y) + Math.abs(b.vx) + Math.abs(b.vy) > 0.08) moving = true;
+      const squash = clamp(b.y * 0.004, 0.09);
+      b.el.style.transform = `translate(${(b.x * 0.18).toFixed(2)}px, ${(b.y * 0.18).toFixed(2)}px) skewX(${clamp(b.x * 0.3, 9).toFixed(2)}deg) scale(${(1 - squash * 0.6).toFixed(4)}, ${(1 + squash).toFixed(4)})`;
+    }
+    if (moving) requestAnimationFrame(step);
+    else { J.bodies.forEach((b) => { b.el.style.transform = ""; }); memory.jelly = null; }
+  };
+  requestAnimationFrame(step);
+}
 function applyPos(wrap, p) {
   if (!wrap || !p) return;
   wrap.style.left = p.left + "px"; wrap.style.top = p.top + "px";
@@ -571,7 +607,7 @@ function startDrag(e) {
   const move = (ev) => {
     const dx = ev.clientX - sx, dy = ev.clientY - sy;
     if (!moved && Math.hypot(dx, dy) < 4) return;
-    if (!moved) { moved = true; memory.dragging = true; wrap.classList.add("bb-dragging"); }
+    if (!moved) { moved = true; memory.dragging = true; wrap.classList.add("bb-dragging"); jelly(wrap); }
     const p = keepOnScreen({ left: Math.round(ox + dx), top: Math.round(oy + dy) }, wrap);
     applyPos(wrap, p); savePos(p);
   };
@@ -584,270 +620,244 @@ function startDrag(e) {
   e.preventDefault();
 }
 
-function styles(busy) {
-  const off = S.pulse === "off";
-  const slow = S.pulseSeconds, quick = S.pulseSeconds / 2;
-  // panel breath: quicker and brighter on a day with commits (activity mode)
-  const breathS = S.pulse === "activity" ? (busy ? slow * 0.75 : slow * 1.5) : slow;
-  const breathHi = S.pulse === "activity" && busy ? 0.75 : 0.55;
+function styles() {
+  const R = S.radius;
   return `
     @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-    .bb { font-family: ${S.font}; color: ${S.text}; font-size: 11px; line-height: 1.4;
-      background: ${S.panel};
-      -webkit-backdrop-filter: blur(${S.glass}px) saturate(1.3); backdrop-filter: blur(${S.glass}px) saturate(1.3);
-      border-radius: ${S.radius}px; padding: 16px 18px 14px; position: relative;
-      box-shadow: inset 0 0 0 1px ${S.edge}, 0 16px 48px rgba(0,0,0,0.45);
+    .bb[data-theme="light"] {
+      --win: linear-gradient(180deg, rgba(255,255,255,0.84), rgba(234,243,253,0.78));
+      --win-edge: rgba(255,255,255,0.95); --win-line: rgba(36,78,140,0.20);
+      --shadow: 0 14px 34px rgba(24,56,108,0.22), 0 2px 6px rgba(24,56,108,0.10);
+      --tb: linear-gradient(180deg, #92dcff 0%, #4fb8f8 46%, #1f93ea 54%, #3cb3fb 100%);
+      --tb-line: rgba(8,82,160,0.55); --tb-text: #fff; --tb-shadow: 0 1px 1px rgba(0,48,110,0.45);
+      --text: #13213a; --muted: rgba(19,33,58,0.58); --faint: rgba(19,33,58,0.34);
+      --row: rgba(255,255,255,0.62); --row-hover: rgba(255,255,255,0.96); --row-line: rgba(36,78,140,0.12); --row-mix: #ffffff;
+      --track: rgba(28,66,124,0.12); --accent: #1683ee;
+      --chip: rgba(255,255,255,0.72); --chip-line: rgba(36,78,140,0.15);
+      --card: rgba(250,253,255,0.97); --card-line: rgba(36,78,140,0.18); --lock-bg: rgba(214,230,250,0.62); --input: rgba(255,255,255,0.8);
+    }
+    .bb[data-theme="dark"] {
+      --win: linear-gradient(180deg, rgba(24,30,46,0.92), rgba(12,16,26,0.9));
+      --win-edge: rgba(255,255,255,0.08); --win-line: rgba(0,0,0,0.55);
+      --shadow: 0 18px 44px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.35);
+      --tb: linear-gradient(180deg, #5e9dff 0%, #3172ef 46%, #1b4fcf 54%, #2a62e6 100%);
+      --tb-line: rgba(0,0,0,0.55); --tb-text: #fff; --tb-shadow: 0 1px 1px rgba(0,10,40,0.6);
+      --text: #edf2fb; --muted: rgba(237,242,251,0.56); --faint: rgba(237,242,251,0.3);
+      --row: rgba(255,255,255,0.035); --row-hover: rgba(255,255,255,0.085); --row-line: rgba(255,255,255,0.06); --row-mix: #0c1018;
+      --track: rgba(255,255,255,0.09); --accent: #5ab8ff;
+      --chip: rgba(255,255,255,0.05); --chip-line: rgba(255,255,255,0.09);
+      --card: rgba(18,22,32,0.97); --card-line: rgba(255,255,255,0.1); --lock-bg: rgba(0,0,0,0.5); --input: rgba(255,255,255,0.06);
+    }
+    .bb { font-family: ${S.font}; color: var(--text); font-size: 11px; line-height: 1.35; position: relative;
+      display: flex; flex-direction: column; gap: 8px;
       -webkit-font-smoothing: antialiased; font-feature-settings: "tnum"; -webkit-user-select: none; user-select: none; }
-    .bb::before { content: ""; position: absolute; inset: -1px; border-radius: ${S.radius + 1}px; padding: 1px;
-      background: ${SPECTRUM}; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.18; pointer-events: none;
-      animation: ${off ? "none" : `bb-breathe ${breathS}s ease-in-out infinite`}; }
-    .bb-grab { cursor: ${S.draggable ? "grab" : "default"}; margin: -16px -18px 0; padding: 16px 18px 0; }
-    .bb-dragging .bb-grab, .bb-dragging .bb-title { cursor: grabbing; }
-    .bb-dragging .bb { box-shadow: inset 0 0 0 1px ${S.edge}, 0 28px 70px rgba(0,0,0,0.6); }
-    .bb-dragging .bb::before { opacity: 0.7; animation: none; }
-    .bb-grip { position: absolute; right: 5px; bottom: 5px; width: 14px; height: 14px; cursor: nwse-resize; opacity: 0;
-      transition: opacity .2s; border-radius: 0 0 ${S.radius - 6}px 0;
-      background: linear-gradient(135deg, transparent 55%, ${S.muted} 55%, ${S.muted} 63%, transparent 63%,
-        transparent 76%, ${S.muted} 76%, ${S.muted} 84%, transparent 84%); }
-    .bb-grip.l { right: auto; left: 5px; cursor: nesw-resize; transform: scaleX(-1); border-radius: 0 0 ${S.radius - 6}px 0; }
-    .bb:hover .bb-grip { opacity: 0.6; }
-    .bb-edge { position: absolute; top: ${S.radius}px; bottom: ${S.radius}px; right: -3px; width: 8px; cursor: ew-resize; border-radius: 4px; }
-    .bb-edge:hover, .bb-dragging .bb-edge { background: linear-gradient(90deg, transparent, ${S.edge}); }
-    .bb-edge.l { right: auto; left: -3px; }
-    .bb-edge.l:hover, .bb-dragging .bb-edge.l { background: linear-gradient(270deg, transparent, ${S.edge}); }
-    .bb-bubbles { position: absolute; inset: 0; overflow: hidden; border-radius: ${S.radius}px; pointer-events: none; z-index: 0; }
-    .bb > .bb-grab, .bb > .bb-body { position: relative; z-index: 1; }
-    .bb-grip, .bb-edge, .bb-edge-b { z-index: 2; }
-    .bb-mute { position: absolute; left: 18px; bottom: 10px; z-index: 3; cursor: pointer; line-height: 0; opacity: 0.45;   /* bottom left */
-      transition: opacity .2s, transform .2s cubic-bezier(.3,1.5,.4,1); }
-    .bb-mute:hover { opacity: 1; transform: scale(1.2); }
+    .bb-win { position: relative; border-radius: ${R}px; background: var(--win);
+      -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5);
+      box-shadow: inset 0 0 0 1px var(--win-edge), 0 0 0 1px var(--win-line), var(--shadow); }
+
+    .bb-board { display: flex; flex-direction: column; min-height: 0; }
+    .bb.bb-fixed .bb-board { flex: 1 1 auto; }   /* fills the height you drag it to; the list scrolls when it's shorter than the rows */
+    .bb-win { transform-origin: 50% 0; }   /* the jelly hangs from the title bar you're holding */
+    .bb-crew { flex: none; z-index: 4; }   /* its hover cards drop down over the board */
+
+    .bb-tb { display: flex; align-items: center; gap: 7px; height: 24px; padding: 0 6px 0 6px; border-radius: ${R}px ${R}px 0 0;
+      background: var(--tb); color: var(--tb-text); text-shadow: var(--tb-shadow); border-bottom: 1px solid var(--tb-line);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.5); cursor: ${S.draggable ? "grab" : "default"}; flex: none; }
+    .bb-dragging .bb-tb { cursor: grabbing; }
+    .bb-tb .sp, .bb-foot .sp { flex: 1; }
+    .bb-title { font-size: 11.5px; font-weight: 600; letter-spacing: 0.01em; white-space: nowrap; }
+    .bb-board .bb-title { cursor: ${S.boardUrl ? "pointer" : "inherit"}; }
+    .bb-board .bb-title:hover { text-decoration: underline; text-underline-offset: 2px; }
+    .bb-online { font-size: 9px; font-weight: 600; opacity: 0.9; letter-spacing: 0.02em; }
+    .bb-swap { font-size: 11px; opacity: 0; cursor: pointer; transition: opacity .2s; }
+    .bb:hover .bb-swap { opacity: 0.75; }
+    .bb-swap:hover { opacity: 1 !important; }
+    .bb-theme { display: inline-flex; padding: 1px; gap: 1px; border-radius: 999px; background: rgba(0,24,70,0.22); box-shadow: inset 0 1px 1px rgba(0,0,0,0.18); }
+    .bb-theme .o { width: 16px; height: 15px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px;
+      font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer; text-shadow: none; color: rgba(255,255,255,0.92); transition: background .15s, color .15s; }
+    .bb-theme .o:hover { color: #fff; background: rgba(255,255,255,0.18); }
+    .bb-theme .o.on { background: rgba(255,255,255,0.95); color: #1b5fc4; box-shadow: 0 1px 2px rgba(0,0,0,0.25); }
+    .bb-lockin { font-size: 8px; font-weight: 700; letter-spacing: .14em; padding: 2px 8px; border-radius: 999px; cursor: pointer;
+      background: linear-gradient(180deg, rgba(255,255,255,0.38), rgba(255,255,255,0.12)); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5);
+      transition: background .15s, transform .15s; }
+    .bb-lockin:hover { background: linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.22)); }
+    .bb-lockin:active { transform: scale(.95); }
+
+    .lg { display: inline-block; flex: none; width: var(--s); height: var(--s); background-repeat: no-repeat;
+      background-size: calc(var(--s) * 8) var(--s); background-position: 0 0; }
+    .lg.play, .bb-tb:hover .lg.hov { animation: bb-play var(--d) steps(8) infinite; }
+    @keyframes bb-play { from { background-position: 0 0; } to { background-position: calc(var(--s) * -8) 0; } }
+
+    .bb-today { display: flex; gap: 0; padding: 6px 11px 0; color: var(--muted); font-size: 9.5px; white-space: nowrap; overflow: hidden; }
+    .bb-today b { color: var(--text); font-weight: 600; }
+    .bb-today .l { overflow: hidden; text-overflow: ellipsis; }
+    .bb-today .stamp { margin-left: auto; padding-left: 8px; color: var(--faint); }
+    .bb-body { padding: 6px 7px 8px; min-height: 0; }
+    .bb.bb-fixed .bb-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+    .bb.bb-fixed .bb-body::-webkit-scrollbar { display: none; }
+    .bb-list { display: grid; gap: 3px; }
+    .bb-err { color: var(--muted); padding: 4px; }
+
+    .bb-proj { position: relative; display: grid; grid-template-columns: 5px 12px minmax(0, 1fr) minmax(64px, 36%) 34px; align-items: center; gap: 7px;
+      padding: 5px 8px 5px 7px; border-radius: 7px; cursor: ${S.clickOpens ? "pointer" : "default"};
+      background: ${S.rowTint > 0 ? `color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 30)}%, var(--row))` : "var(--row)"};
+      box-shadow: inset 0 0 0 1px var(--row-line); transition: background .15s, transform .25s cubic-bezier(.2,.8,.2,1); }
+    .bb-proj:hover { background: ${S.rowTint > 0 ? `color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 45)}%, var(--row-hover))` : "var(--row-hover)"}; }
+    .bb-proj.arrived { animation: bb-arrive 1.2s cubic-bezier(.2,.8,.2,1) both; }
+    .bb-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--faint); opacity: 0.6; }
+    .bb-proj.warm .bb-dot, .bb-proj.hot .bb-dot { background: ${S.spectrum[0]}; opacity: 1; }
+    .bb-proj.warm .bb-dot { animation: bb-ping 4s ease-out infinite; }
+    .bb-proj.hot .bb-dot { background: ${S.spectrum[3] || S.spectrum[0]}; animation: bb-ping 2s ease-out infinite; }
+    .bb-icon { display: inline-flex; line-height: 0; cursor: grab; border-radius: 3px; opacity: .9; transition: transform .2s cubic-bezier(.3,1.5,.4,1); }
+    .bb-icon:hover { transform: scale(1.25); opacity: 1; }
+    .bb-name { display: flex; align-items: center; gap: 5px; min-width: 0; font-weight: 500; font-size: 11px; }
+    .bb-name > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bb-new { font-style: normal; font-size: 7px; font-weight: 700; letter-spacing: 0.12em; padding: 1px 5px; border-radius: 999px; flex: none;
+      color: #fff; background: ${SPECTRUM}; }
+    .bb-bar { position: relative; height: 6px; border-radius: 999px; background: var(--track); box-shadow: inset 0 1px 1px rgba(0,0,0,0.12); overflow: hidden; }
+    .bb-bar i { position: relative; display: block; height: 100%; width: var(--w); min-width: 6px; border-radius: 999px;
+      background: ${SPECTRUM}; background-size: calc(100% / var(--f)) 100%; transition: width 1s cubic-bezier(.2,.8,.2,1); }
+    .bb-bar i::after { content: ""; position: absolute; left: 2px; right: 2px; top: 1px; height: 2px; border-radius: 999px;
+      background: linear-gradient(90deg, rgba(255,255,255,0.75), rgba(255,255,255,0.35)); }
+    .bb-proj.noplan .bb-bar i { display: none; }
+    .bb-proj.full .bb-bar i { animation: bb-sheen 3s linear infinite; background-size: 200% 100%;
+      background-image: linear-gradient(90deg, ${S.spectrum.join(", ")}, ${S.spectrum[0]}); }
+    .bb-count { text-align: right; font-size: 9.5px; font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .bb-proj.full .bb-count { font-size: 8px; letter-spacing: 0.1em; background: ${SPECTRUM}; -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .bb-proj.noplan .bb-count, .bb-proj.asleep .bb-count { color: var(--faint); font-weight: 500; }
+    .bb-proj.pushed .bb-count { color: var(--accent); }
+    .bb-track { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--row-line); }
+    .bb-track > b { display: block; font-weight: 700; font-size: 8px; letter-spacing: 0.12em; color: var(--muted); margin: 0 0 5px 4px; }
+    .bb-track > b i { font-style: normal; font-weight: 400; letter-spacing: 0; margin-left: 6px; color: var(--faint); }
+    .bb-proj.ins-before::after, .bb-proj.ins-after::after { content: ""; position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px;
+      background: ${SPECTRUM}; top: -3px; }
+    .bb-proj.ins-after::after { top: auto; bottom: -3px; }
+    .bb-dnd, .bb-dnd * { cursor: grabbing !important; }
+    .bb-ghost { position: absolute; left: 0; top: 0; z-index: 9999; pointer-events: none; opacity: 0.95; display: inline-block;
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,0.4)); line-height: 0; }
+    .bb-ghost .px { display: inline-block; }
+    .lifting { opacity: 0.35; }
+    .px { position: relative; display: inline-block; overflow: visible; flex: none; }
+    .px i { position: absolute; display: block; }
+    ${S.cute.wiggle ? `
+    .bb-proj:hover { transform: translateX(2px); }
+    .bb-proj:hover .bb-dot { animation: bb-wiggle .5s ease-in-out; }
+    ` : ""}
+
+    .bb-grp { display: flex; align-items: center; gap: 5px; padding: 7px 10px 3px; font-size: 8.5px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--muted); cursor: pointer; }
+    .bb-grp span { color: var(--faint); letter-spacing: 0.04em; }
+    .bb-grp i { width: 0; height: 0; border-left: 3.5px solid transparent; border-right: 3.5px solid transparent; border-top: 5px solid currentColor;
+      transition: transform .15s; }
+    .bb-grp.shut i { transform: rotate(-90deg); }
+    .bb-grp:hover { color: var(--text); }
+    .bb-empty { padding: 1px 10px 3px 22px; font-size: 9.5px; color: var(--faint); font-style: italic; }
+    .bb-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px 8px 8px; }
+    .bb-chip { position: relative; display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px 1px 2px; border-radius: 999px;
+      background: var(--chip); box-shadow: inset 0 0 0 1px var(--chip-line); font-size: 10px; cursor: default; transition: background .15s; }
+    .bb-chip > b { font-weight: 500; opacity: 0.8; }
+    .bb-chip:hover { background: var(--row-hover); }
+    .bb-chip:hover > b { opacity: 1; }
+    .bb-tip { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; width: 186px; display: flex; flex-direction: column; gap: 3px;
+      padding: 8px 10px 9px; border-radius: 9px; background: var(--card); box-shadow: inset 0 0 0 1px var(--card-line), 0 10px 26px rgba(0,0,0,0.28);
+      opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity .15s, transform .15s; pointer-events: none; }
+    .bb-chip.r .bb-tip { left: auto; right: 0; }
+    .bb-chip:hover .bb-tip { opacity: 1; visibility: visible; transform: none; }
+    .bb-tip .who { font-size: 11px; color: var(--muted); }
+    .bb-tip .who b { color: var(--text); font-weight: 600; }
+    .bb-tip .sub { font-size: 8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin: 2px 0 1px; }
+    .bb-tip .ex { font-size: 10px; color: var(--text); padding-left: 9px; position: relative; }
+    .bb-tip .ex::before { content: ""; position: absolute; left: 1px; top: 6px; width: 3px; height: 3px; border-radius: 50%; background: var(--accent); }
+
+    .bb-foot { display: flex; align-items: center; gap: 8px; padding: 5px 8px 6px; border-top: 1px solid var(--row-line); }
+    .bb-mute { cursor: pointer; line-height: 0; opacity: 0.55; transition: opacity .2s; }
+    .bb-mute:hover { opacity: 1; }
     .bb-mute .px { display: none; }
     .bb-mute.lv0 .px.lv0, .bb-mute.lv1 .px.lv1, .bb-mute.lv2 .px.lv2, .bb-mute.lv3 .px.lv3 { display: inline-block; }
-    .bb-mute.lv0 { opacity: 0.7; }
+    .bb-refresh { font-size: 12px; line-height: 1; color: var(--muted); opacity: .6; cursor: pointer; transition: opacity .2s, transform .3s; }
+    .bb-refresh:hover { opacity: 1; transform: rotate(90deg); }
+    .bb-btn { display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 8px; border-radius: 999px; cursor: pointer;
+      font-size: 8px; font-weight: 700; letter-spacing: .14em; color: var(--muted); box-shadow: inset 0 0 0 1px var(--chip-line); background: var(--chip);
+      transition: color .15s, background .15s; }
+    .bb-btn:hover { color: var(--text); background: var(--row-hover); }
+
+    .bb-grip { position: absolute; right: 4px; bottom: 4px; width: 12px; height: 12px; cursor: nwse-resize; opacity: 0; transition: opacity .2s; z-index: 6;
+      background: linear-gradient(135deg, transparent 55%, var(--faint) 55%, var(--faint) 63%, transparent 63%, transparent 76%, var(--faint) 76%, var(--faint) 84%, transparent 84%); }
+    .bb-grip.l { right: auto; left: 4px; cursor: nesw-resize; transform: scaleX(-1); }
+    .bb:hover .bb-grip { opacity: 0.8; }
+    .bb-edge { position: absolute; top: ${R}px; bottom: ${R}px; right: -3px; width: 7px; cursor: ew-resize; z-index: 6; }   /* above the crew window, which sits at 4 */
+    .bb-edge.l { right: auto; left: -3px; }
+    .bb-edge:hover, .bb-edge-b:hover { background: rgba(120,170,255,0.35); border-radius: 4px; }
+    .bb-edge-b { position: absolute; left: ${R}px; right: ${R}px; bottom: -3px; height: 7px; cursor: ns-resize; z-index: 6; }
+
+    .bb-lock { position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; border-radius: ${R}px; cursor: default;
+      background: var(--lock-bg); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+    .bb-lock-card { position: relative; text-align: center; }
+    .bb-lock .t { font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+    .bb-lock-in { display: block; width: 200px; box-sizing: border-box; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--chip-line); outline: none;
+      background: var(--input); color: var(--text); font: inherit; font-size: 13px; letter-spacing: 0.08em; text-align: center; caret-color: var(--text); }
+    .bb-lock-in:focus { border-color: var(--accent); }
+    .bb-lock-in::placeholder { color: var(--faint); letter-spacing: 0; }
+    .bb-lock .row { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+    .bb-lock .go { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 6px 14px; border-radius: 999px; background: var(--chip);
+      box-shadow: inset 0 0 0 1px var(--chip-line); cursor: pointer; color: var(--text); }
+    .bb-lock .go:hover { background: var(--row-hover); }
+    .bb-lock .go.dim { background: transparent; box-shadow: none; color: var(--muted); }
+    .bb-lock .e { margin-top: 10px; font-size: 10px; color: ${S.spectrum[3] || "#f04aa6"}; min-height: 14px; }
+    .bb-lock .bb-refresh { position: absolute; left: 50%; bottom: -28px; transform: translateX(-50%); }
+    .bb-lock.err .bb-lock-in { animation: bb-shake .4s ease; }
+
+    .bb-fly { position: absolute; top: 0; z-index: 5; width: ${S.flyWidth || 300}px; visibility: hidden; opacity: 0;
+      pointer-events: none; transition: opacity .18s ease, transform .18s ease; cursor: default; }
+    .bb-fly.right { left: 100%; padding-left: 12px; transform: translateX(-6px); }
+    .bb-fly.left { right: 100%; padding-right: 12px; transform: translateX(6px); }
+    .bb-fly.in { left: auto; right: 6px; padding: 0; transform: translateY(-4px); }
+    .bb-fly.show { visibility: visible; opacity: 1; transform: none; pointer-events: auto; }
+    .bb-fly-card { background: var(--card); border-radius: ${R - 2}px; padding: 10px 12px;
+      -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px); box-shadow: inset 0 0 0 1px var(--card-line), 0 14px 36px rgba(0,0,0,0.3); }
+    .bb-fly-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--row-line); }
+    .bb-fly-head b { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bb-fly-head span { color: var(--muted); font-size: 9.5px; white-space: nowrap; }
+    .bb-steps { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+    .bb-steps::-webkit-scrollbar { display: none; }
+    .bb-steps div { display: grid; grid-template-columns: 26px 1fr 10px; gap: 6px; font-size: 10.5px; color: var(--muted); padding: 2px 0; }
+    .bb-steps .n { font-weight: 600; font-feature-settings: "tnum"; }
+    .bb-steps .done { color: var(--text); opacity: 0.5; }
+    .bb-steps .cur { color: var(--text); }
+    .bb-steps .cur .n, .bb-steps .cur .m { color: var(--accent); }
+    .bb-steps .m { text-align: right; }
+    .bb-steps.ticks div { grid-template-columns: 26px 1fr 18px; }
+    .bb-steps.ticks .m { cursor: pointer; border-radius: 5px; text-align: center; transition: background .15s, transform .15s; }
+    .bb-steps.ticks .m:hover { background: var(--row-hover); color: var(--text); transform: scale(1.3); }
+
+    .bb-burst { position: absolute; right: 22px; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 3; }
+    .bb-burst i { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: var(--c);
+      box-shadow: 0 0 6px var(--c); animation: bb-spark var(--t) cubic-bezier(.1,.8,.3,1) forwards; }
+    .bb-burst.done i { width: 5px; height: 5px; }
     .bb.bb-party { animation: bb-dance 1.5s cubic-bezier(.3,1.3,.4,1) 1; }
-    .bb.bb-party::before { animation: bb-rave .6s linear 4; opacity: 1; }
+    .bb.bb-party .bb-tb { animation: bb-rave .6s linear 4; }
     .bb.bb-party .bb-proj { animation: bb-wave .7s cubic-bezier(.3,1.5,.4,1) 1; animation-delay: calc(var(--i, 0) * 80ms); }
-    .bb-confetti { position: absolute; inset: 0; overflow: hidden; border-radius: ${S.radius}px; pointer-events: none; z-index: 4; }
+    .bb-confetti { position: absolute; inset: 0; overflow: hidden; border-radius: ${R}px; pointer-events: none; z-index: 40; }
     .bb-confetti i { position: absolute; left: var(--x); top: -14px; width: 6px; height: 10px; border-radius: 1px; background: var(--c);
       opacity: 0; transform: scale(var(--s)); animation: bb-fall var(--t) cubic-bezier(.3,.5,.7,1) var(--d) forwards; }
     @keyframes bb-fall { 0% { top: -14px; transform: scale(var(--s)) rotate(0); opacity: 1 } 80% { opacity: 1 }
       100% { top: 104%; transform: scale(var(--s)) rotate(var(--r)); opacity: 0 } }
-    @keyframes bb-dance { 0% { transform: none } 12% { transform: translateY(-16px) rotate(-1.6deg) scale(1.03) }
-      28% { transform: translateY(3px) rotate(1.6deg) } 44% { transform: translateY(-9px) rotate(-1deg) scale(1.015) }
-      60% { transform: translateY(0) rotate(.8deg) } 78% { transform: translateY(-4px) } 100% { transform: none } }
-    @keyframes bb-rave { from { filter: hue-rotate(0deg) brightness(1.8) } to { filter: hue-rotate(360deg) brightness(1.8) } }
-    @keyframes bb-wave { 0% { transform: none } 35% { transform: translateY(-8px) scale(1.02) } 70% { transform: translateY(2px) } 100% { transform: none } }
-    .bb-edge-b { position: absolute; left: ${S.radius}px; right: ${S.radius}px; bottom: -3px; height: 8px; cursor: ns-resize; border-radius: 4px; }
-    .bb-edge-b:hover, .bb-dragging .bb-edge-b { background: linear-gradient(180deg, transparent, ${S.edge}); }
-    .bb-body { flex: 1 1 auto; min-height: 0; }
-    .bb.bb-fixed { display: flex; flex-direction: column; box-sizing: border-box; }
-    .bb.bb-fixed .bb-body { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; margin: 0 -18px; padding: 0 18px 6px;
-      -webkit-mask-image: linear-gradient(#000 calc(100% - 22px), transparent); mask-image: linear-gradient(#000 calc(100% - 22px), transparent); }
-    .bb.bb-fixed .bb-body::-webkit-scrollbar { display: none; }
-    .bb-bubbles i { position: absolute; left: var(--x); bottom: -24px; width: var(--s); height: var(--s); border-radius: 50%;
-      border: 1px solid rgba(255,255,255,0.32); box-shadow: inset -1px -1px 2px rgba(255,255,255,0.22);
-      animation: bb-rise var(--t) linear infinite; animation-delay: var(--dl); opacity: 0; }
-    .bb-grip:hover, .bb-dragging .bb-grip { opacity: 1 !important; }
-    .bb-eyebrow { font-size: 8px; font-weight: 600; letter-spacing: 0.16em; color: ${S.accent}; text-transform: uppercase; }
-    .bb-head { display: flex; align-items: flex-end; justify-content: space-between; margin: 2px 0 8px; }
-    .bb-title { font-size: 15px; font-weight: 600; letter-spacing: -0.015em; cursor: ${S.boardUrl ? "pointer" : "default"}; }
-    .bb-title:hover { opacity: 0.8; }
-    .bb-swap { display: inline-block; margin-left: 8px; margin-right: auto; font-size: 12px; color: ${S.muted}; opacity: 0; cursor: pointer; vertical-align: 2px;
-      transition: opacity .2s, transform .2s cubic-bezier(.3,1.5,.4,1); }
-    .bb:hover .bb-swap { opacity: 0.5; }
-    .bb-swap:hover { opacity: 1 !important; transform: scale(1.25); }
-    .bb-title .g { background: ${SPECTRUM}; -webkit-background-clip: text; background-clip: text; color: transparent; }
-    .bb-stamp { color: ${S.muted}; font-size: 9px; }
-    .bb-lockin { margin-left: auto; margin-right: 12px; font-size: 8.5px; font-weight: 600; letter-spacing: .14em; padding: 3px 10px; border-radius: 999px; cursor: pointer;
-      border: 1px solid rgba(255,255,255,0.16); color: ${S.text}; opacity: .8; user-select: none; -webkit-user-select: none; transition: background .15s, opacity .15s, transform .15s; }
-    .bb-lockin:hover { background: rgba(255,255,255,0.08); opacity: 1; }
-    .bb-lockin:active { transform: scale(.96); }
-    .bb-today { color: ${S.muted}; font-size: 9.5px; margin: 0 0 8px; }
-    .bb-today b { color: ${S.text}; font-weight: 600; }
-    .bb-rule { height: 1px; background: ${SPECTRUM}; opacity: 0.7; margin: 0 0 12px; }
-    .bb-list { display: grid; gap: 5px; container-type: inline-size; }
-    .bb-track { container-type: inline-size; }
-    .bb-proj { display: grid; gap: 5px; cursor: ${S.clickOpens ? "pointer" : "default"}; border-radius: 8px; padding: 7px 10px 8px; min-width: 0;
-      box-shadow: inset 0 0 0 1px ${S.edge}; transition: background .15s, box-shadow .15s; }
-    ${S.rowTint > 0 ? `.bb-proj { background: color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 22)}%, rgba(0,0,0,0.45)); }   /* a shade darker than the panel, the faintest hint of the icon's colour; the edge stays neutral */
-    .bb-proj:hover { background: color-mix(in srgb, var(--tint) ${Math.round(S.rowTint * 50)}%, rgba(0,0,0,0.45)); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.13); }` : `.bb-proj { background: rgba(0,0,0,0.45); } .bb-proj:hover { background: rgba(0,0,0,0.3); }`}
-    @container (max-width: 330px) { .bb-proj .bb-new, .bb-proj .bb-spark { display: none; } .bb-proj .bb-sub .r { gap: 5px; } }   /* a narrow list drops the extras instead of spilling */
-    .bb-proj.arrived { animation: bb-arrive 1.2s cubic-bezier(.2,.8,.2,1) both; }
-    .bb-new { font-size: 7.5px; font-weight: 700; letter-spacing: 0.14em; padding: 1px 6px; border-radius: 999px; flex: none;
-      border: 1px solid rgba(255,255,255,0.14); background: ${SPECTRUM}; -webkit-background-clip: text; background-clip: text; color: transparent; }
-    .bb-track { margin-top: 14px; padding-top: 10px; border-top: 1px solid ${S.edge}; }
-    .bb-track > b { display: block; font-weight: 600; font-size: 9px; letter-spacing: 0.12em; color: ${S.muted}; margin-bottom: 9px; }
-    .bb-track > b i { font-style: normal; font-weight: 400; letter-spacing: 0; margin-left: 7px; opacity: 0.75; }
-    .bb-steps.ticks div { grid-template-columns: 26px 1fr 18px; }
-    .bb-steps.ticks .m { cursor: pointer; border-radius: 5px; text-align: center; transition: background .15s, transform .15s, color .15s; }
-    .bb-steps.ticks .m:hover { background: rgba(255,255,255,0.14); color: ${S.text}; transform: scale(1.3); }
-    .bb-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .bb-dot { width: 4px; height: 4px; border-radius: 50%; background: ${S.muted}; opacity: 0.35; flex: none; }
-    .bb-proj.warm .bb-dot, .bb-proj.hot .bb-dot { background: ${S.spectrum[0]}; opacity: 1; }
-    .bb-proj.warm .bb-dot { animation: ${off ? "none" : `bb-ping ${slow}s ease-out infinite`}; }
-    .bb-proj.hot .bb-dot { background: ${S.spectrum[3] || S.spectrum[0]}; animation: ${off ? "none" : `bb-ping ${quick}s ease-out infinite`}; }
-    .bb-name { font-weight: 500; font-size: 11px; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
-    .bb-pill { font-size: 7.5px; font-weight: 600; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 999px; flex: none; max-width: 46%;
-      border: 1px solid rgba(255,255,255,0.12); color: ${S.text}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; font-variant-numeric: tabular-nums; }
-    .bb-proj.full .bb-pill { border-color: transparent; background: ${SPECTRUM}; color: #fff; }
-    .bb-proj.asleep .bb-pill { color: ${S.muted}; border-color: transparent; padding-right: 0; opacity: .8; }   /* a status, not a badge */
-    .bb-bar { height: ${S.barHeight}px; border-radius: 999px; background: ${S.track}; overflow: hidden; }
-    .bb-bar i { display: block; height: 100%; width: var(--w); min-width: ${S.barHeight}px; border-radius: 999px;
-      background: ${SPECTRUM}; background-size: calc(100% / var(--f)) 100%;
-      transition: width 1s cubic-bezier(.2,.8,.2,1); }
-    .bb-proj.full .bb-bar i { animation: bb-sheen 3s linear infinite; background-size: 200% 100%;
-      background-image: linear-gradient(90deg, ${S.spectrum.join(", ")}, ${S.spectrum[0]}); }
-    .bb-sub { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: ${S.muted}; font-size: 9px; min-width: 0; }
-    .bb-sub .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .bb-sub .r { white-space: nowrap; display: flex; align-items: center; gap: 7px; flex: none; }
-    .bb-sub b { color: ${S.accent}; font-weight: 600; font-size: 7.5px; letter-spacing: 0.08em; margin-right: 4px; opacity: .9; }
-    .bb-spark { display: flex; align-items: flex-end; gap: 2px; height: 8px; }
-    .bb-spark i { display: block; width: 3px; border-radius: 1px; background: ${S.muted}; opacity: 0.35; height: var(--h); min-height: 1px; }
-    .bb-spark i.on { background: ${SPECTRUM}; background-size: 42px 100%; opacity: 0.95; }
-    .bb-spark { position: relative; cursor: default; padding: 4px 0; margin: -4px 0; transition: transform .2s cubic-bezier(.2,.8,.2,1); transform-origin: right bottom; }
-    .bb-spark:hover { transform: scale(1.6); z-index: 3; }
-    .bb-spark:hover i { opacity: 1; }
-    .bb-sparktip { position: absolute; right: 0; bottom: calc(100% + 2px); transform: scale(.625); transform-origin: right bottom;
-      display: none; flex-direction: column; gap: 3px; min-width: 128px; padding: 7px 9px; border-radius: 8px; white-space: nowrap;
-      background: rgba(18,19,26,0.96); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-      color: ${S.text}; font-size: 10.5px; line-height: 1.3; pointer-events: none; }
-    .bb-spark:hover .bb-sparktip { display: flex; }
-    .bb-sparktip b { color: ${S.muted}; font-weight: 600; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2px; }
-    .bb-sparktip > span { display: flex; justify-content: space-between; gap: 14px; }
-    .bb-sparktip em { font-style: normal; font-weight: 600; background: ${SPECTRUM}; -webkit-background-clip: text; color: transparent; }
-    .bb-bump { color: ${S.spectrum[3] || S.accent}; font-weight: 600; animation: bb-fade 4s ease-out forwards; }
-    .bb-push { color: ${S.text}; font-weight: 600; }
-    .bb-err { color: ${S.muted}; }
-    .bb-lock { position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; border-radius: ${S.radius}px; cursor: default;
-      background: rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
-    .bb-lock-card { text-align: center; }
-    .bb-lock .t { font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: ${S.muted}; margin-bottom: 14px; }
-    .bb-lock-in { display: block; width: 200px; box-sizing: border-box; padding: 9px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.14); outline: none;
-      background: rgba(255,255,255,0.06); color: ${S.text}; font: inherit; font-size: 13px; letter-spacing: 0.08em; text-align: center; caret-color: ${S.text}; }
-    .bb-lock-in:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.09); }
-    .bb-lock-in::placeholder { color: ${S.muted}; letter-spacing: 0; }
-    .bb-lock .row { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
-    .bb-lock .go { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 6px 14px; border-radius: 999px; background: rgba(255,255,255,0.08); cursor: pointer; color: ${S.text}; user-select: none; -webkit-user-select: none; }
-    .bb-lock .go:hover { background: rgba(255,255,255,0.15); }
-    .bb-lock .go.dim { background: transparent; color: ${S.muted}; }
-    .bb-lock .e { margin-top: 10px; font-size: 10px; color: ${S.spectrum[3] || S.accent}; min-height: 14px; }
-    .bb-lock.err .bb-lock-in { animation: bb-shake .4s ease; }
-    .bb-refresh { position: absolute; left: 18px; bottom: 10px; z-index: 61; font-size: 13px; line-height: 1; color: ${S.muted}; opacity: .35; cursor: pointer; user-select: none; -webkit-user-select: none; transition: opacity .2s, transform .3s; }
-    .bb-refresh:hover { opacity: 1; transform: rotate(90deg); }
-    .bb > .bb-refresh { left: 46px; bottom: 11px; z-index: 3; }   /* next to the sound toggle */
-    .bb-lockbtn { position: absolute; left: 68px; bottom: 7px; z-index: 3; display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px 4px 7px; border-radius: 999px; line-height: 0;
-      border: 1px solid rgba(255,255,255,0.14); color: ${S.text}; opacity: .7; cursor: pointer; user-select: none; -webkit-user-select: none; transition: opacity .2s, background .2s, transform .2s; }
-    .bb-lockbtn b { font-size: 8.5px; font-weight: 600; letter-spacing: .14em; line-height: 1; }
-    .bb-lockbtn.bb-help { left: 146px; height: 22px; padding: 0 9px; box-sizing: border-box; }   /* same height as LOCK, which gets its height from the icon */
-    .bb-lockbtn:hover { opacity: 1; background: rgba(255,255,255,0.08); transform: translateY(-1px); }
+    @keyframes bb-dance { 0% { transform: none } 12% { transform: translateY(-14px) rotate(-1.4deg) scale(1.03) }
+      28% { transform: translateY(3px) rotate(1.4deg) } 44% { transform: translateY(-8px) rotate(-.9deg) scale(1.015) }
+      60% { transform: translateY(0) rotate(.7deg) } 78% { transform: translateY(-3px) } 100% { transform: none } }
+    @keyframes bb-rave { from { filter: hue-rotate(0deg) brightness(1.2) } to { filter: hue-rotate(360deg) brightness(1.2) } }
+    @keyframes bb-wave { 0% { transform: none } 35% { transform: translateY(-6px) scale(1.02) } 70% { transform: translateY(2px) } 100% { transform: none } }
     @keyframes bb-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
-    .bb-proj { position: relative; }
-    ${S.stepsStyle === "flyout" ? `
-    .bb-fly { position: absolute; top: 0; z-index: 5; width: ${S.flyWidth || 300}px; visibility: hidden; opacity: 0;
-      pointer-events: none; transition: opacity .18s ease, transform .18s ease; cursor: default; }
-    .bb-fly.right { left: 100%; padding-left: 14px; transform: translateX(-6px); }
-    .bb-fly.left { right: 100%; padding-right: 14px; transform: translateX(6px); }
-    .bb-fly.in { left: auto; right: 0; padding: 0; transform: translateY(-4px); }
-    .bb-fly.over { left: 10px; right: 10px; width: auto !important; padding: 0; transform: translateY(6px); }
-    .bb-fly.over .bb-fly-card { width: auto; background: ${S.panel.replace(/[\d.]+\)\s*$/, "0.92)")}; }   /* more opaque than the panel so the rows don't bleed through. CSS here, so no // comments */
-    .bb-fly.show { visibility: visible; opacity: 1; transform: none; pointer-events: auto; }
-    .bb-fly-card { background: ${S.panel}; border-radius: ${S.radius - 4}px; padding: 12px 14px;
-      -webkit-backdrop-filter: blur(${S.glass}px) saturate(1.3); backdrop-filter: blur(${S.glass}px) saturate(1.3);
-      box-shadow: inset 0 0 0 1px ${S.edge}, 0 16px 48px rgba(0,0,0,0.5); }
-    .bb-fly-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px;
-      padding-bottom: 6px; border-bottom: 1px solid ${S.edge}; }
-    .bb-fly-head b { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .bb-fly-head span { color: ${S.muted}; font-size: 10px; white-space: nowrap; }
-    .bb-steps { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
-    .bb-steps::-webkit-scrollbar { display: none; }
-    ` : `
-    .bb-steps { max-height: 0; overflow: hidden; transition: max-height .35s ease, margin .35s ease; margin: 0; }
-    .bb-proj:hover .bb-steps { max-height: 520px; margin-top: 2px; }
-    `}
-    .bb-steps div { display: grid; grid-template-columns: 26px 1fr 10px; gap: 6px; font-size: 10.5px; color: ${S.muted}; padding: 2px 0; }
-    .bb-steps .n { font-weight: 600; font-feature-settings: "tnum"; }
-    .bb-steps .done { color: ${S.text}; opacity: 0.55; }
-    .bb-steps .cur { color: ${S.text}; }
-    .bb-steps .cur .n { color: ${S.accent}; }
-    .bb-steps .m { text-align: right; }
-    .bb-steps .cur .m { color: ${S.accent}; }
-    .bb-burst { position: absolute; left: var(--w); top: 28px; width: 0; height: 0; pointer-events: none; z-index: 3; }
-    .bb-burst.done { left: 50%; }
-    .bb-burst i { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: var(--c);
-      box-shadow: 0 0 6px var(--c); animation: bb-spark var(--t) cubic-bezier(.1,.8,.3,1) forwards; }
-    .bb-burst.done i { width: 5px; height: 5px; }
-    .px { position: relative; display: inline-block; overflow: visible; flex: none; }
-    .px i { position: absolute; display: block; }
-    .bb-icon { display: inline-flex; line-height: 0; cursor: grab; flex: none; border-radius: 4px; opacity: .85; transition: transform .2s cubic-bezier(.3,1.5,.4,1), opacity .2s; }
-    .bb-proj:hover .bb-icon { opacity: 1; }
-    .bb-icon:hover { transform: scale(1.2); }
-    .bb-dnd, .bb-dnd * { cursor: grabbing !important; }
-    .bb-ghost .px { display: inline-block; }
-    .bb-ghost { position: absolute; left: 0; top: 0; z-index: 9999; pointer-events: none; opacity: 0.95; display: inline-block;
-      filter: drop-shadow(0 6px 10px rgba(0,0,0,0.5)); line-height: 0; }
-    .lifting { opacity: 0.35; }
-    .bb-proj.ins-before::after, .bb-proj.ins-after::after { content: ""; position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px;
-      background: ${SPECTRUM}; background-size: 200% 100%; top: -7px; }
-    .bb-proj.ins-after::after { top: auto; bottom: -7px; }
-    ${S.cute.wiggle ? `
-    .bb-proj { transition: transform .25s cubic-bezier(.2,.8,.2,1); }
-    .bb-proj:hover { transform: translateX(3px); }
-    .bb-proj:hover .bb-dot { animation: bb-wiggle .5s ease-in-out; }
-    .bb-pill { transition: transform .2s cubic-bezier(.2,.8,.2,1); }
-    .bb-proj:hover .bb-pill { transform: scale(1.08); }
-    .bb-proj:hover .bb-bar i { filter: brightness(1.15); }
-    ` : ""}
     @keyframes bb-spark { 0% { transform: rotate(var(--a)) translateX(0) scale(1); opacity: 1 }
       100% { transform: rotate(var(--a)) translateX(var(--d)) scale(0); opacity: 0 } }
-    @keyframes bb-rise { 0% { transform: translate(0, 0); opacity: 0 } 8% { opacity: .55 } 50% { transform: translate(7px, -300px) }
-      92% { opacity: .35 } 100% { transform: translate(-3px, -620px); opacity: 0 } }
     @keyframes bb-wiggle { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-12deg) } 75% { transform: rotate(12deg) } }
-    @keyframes bb-breathe { 0%,100% { opacity: 0.18 } 50% { opacity: ${breathHi} } }
-    @keyframes bb-ping { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,0.35) } 70% { box-shadow: 0 0 0 7px rgba(255,255,255,0) } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0) } }
+    @keyframes bb-ping { 0% { box-shadow: 0 0 0 0 rgba(120,170,255,0.45) } 70% { box-shadow: 0 0 0 6px rgba(120,170,255,0) } 100% { box-shadow: 0 0 0 0 rgba(120,170,255,0) } }
     @keyframes bb-sheen { from { background-position: 0 0 } to { background-position: 200% 0 } }
-    @keyframes bb-fade { 0%,60% { opacity: 1 } 100% { opacity: 0 } }
     @keyframes bb-arrive { from { opacity: 0; transform: translateY(-8px) } to { opacity: 1; transform: none } }
   `;
 }
 
-const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-function Spark({ days }) {   // 14 bars, oldest left. Hover: the bars grow and a tip lists the days with commits
-  if (!days || !days.length) return null;
-  const max = Math.max(1, ...days), total = days.reduce((a, b) => a + b, 0);
-  const label = (i) => { const d = new Date(); d.setDate(d.getDate() - (days.length - 1 - i)); return i === days.length - 1 ? "today" : i === days.length - 2 ? "yesterday" : `${DAY[d.getDay()]} ${d.getDate()}`; };
-  const hits = days.map((n, i) => n ? [label(i), n] : null).filter(Boolean);
-  return (
-    <span className="bb-spark">
-      {days.map((n, i) => (
-        <i key={i} className={n ? "on" : ""} style={{ "--h": `${Math.max(1, Math.round((n / max) * 10))}px`,
-          backgroundPosition: `${-i * 3}px 0` }} />
-      ))}
-      <span className="bb-sparktip">
-        <b>{total ? `${total} commit${total === 1 ? "" : "s"} · last 14 days` : "no commits in 14 days"}</b>
-        {hits.map(([d, n]) => <span key={d}><span>{d}</span><em>{n}</em></span>)}
-      </span>
-    </span>
-  );
-}
 
-function Steps({ steps }) {   // the "dropdown" style; "flyout" uses the shared card below
-  if (!S.hoverSteps || S.stepsStyle === "flyout" || !steps || !steps.length) return null;
-  return (
-    <div className="bb-steps">
-      {steps.map((st, i) => (
-        <div key={i} className={st.status === "done" ? "done" : st.status === "current" ? "cur" : ""}>
-          <span className="n">{st.n}</span><span>{st.name}</span>
-          <span className="m">{st.status === "done" ? "✓" : st.status === "current" ? "●" : "○"}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// One shared step card, kept outside the scrolling list so nothing clips it.
-// On hover it's filled with that project's steps and placed so it never leaves
-// the screen: side with room, capped to the screen, scrolled to the current step.
 function esc(t) { return String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 function hideFly() { document.querySelectorAll(".bb-fly").forEach((f) => f.classList.remove("show")); }
 function scheduleHide() { clearTimeout(memory.flyT); memory.flyT = setTimeout(hideFly, 160); }
@@ -865,7 +875,8 @@ function placeFly(fly, bb, anchor, list) {   // beside the widget, on the side w
   const fitsRight = br.right + width <= W - margin, fitsLeft = br.left - width >= margin;
   const left = !inside && !fitsRight && (fitsLeft || br.left > W - br.right);   // all in screen pixels, so the zoom can't fool it
   fly.classList.toggle("in", inside); fly.classList.toggle("left", left); fly.classList.toggle("right", !inside && !left);
-  const headBottom = inside && bb.querySelector(".bb-grab") ? bb.querySelector(".bb-grab").getBoundingClientRect().bottom + 6 : margin;
+  const boardBar = bb.querySelector(".bb-board .bb-tb");   // the card stays under the board's title bar, off the crew
+  const headBottom = inside && boardBar ? boardBar.getBoundingClientRect().bottom + 6 : margin;
   if (list) list.style.maxHeight = Math.max(80, (H - margin - headBottom - 60) / z) + "px";
   const top = (pr.top - br.top) / z;
   fly.style.top = top + "px";
@@ -884,13 +895,13 @@ function placeFly(fly, bb, anchor, list) {   // beside the widget, on the side w
   if (dx) { if (left) fly.style.marginRight = Math.round(-dx / z) + "px"; else fly.style.marginLeft = Math.round(dx / z) + "px"; }
 }
 function showFly(proj) {
-  if (S.stepsStyle !== "flyout" || !S.hoverSteps) return;
+  if (!S.hoverSteps) return;
   const bb = proj.closest(".bb"), fly = bb && bb.querySelector(".bb-fly");
   const info = memory.stepsById[proj.dataset.id];
   if (!fly || !info || !info.steps.length) { hideFly(); return; }
   hideFly(); keepFly();
   fly.querySelector(".bb-fly-head b").textContent = info.name;
-  fly.querySelector(".bb-fly-head span").textContent = `${info.done} / ${info.total} steps`;
+  fly.querySelector(".bb-fly-head span").textContent = `${info.done} / ${info.total} steps` + (info.ago ? ` · ${info.ago}` : "");
   const list = fly.querySelector(".bb-steps");
   const ticks = info.id === "tools";   // the hand-kept track: its marks are buttons that write tools.json
   list.classList.toggle("ticks", ticks);
@@ -957,29 +968,15 @@ function Px({ rows, s, className }) {
   const [w, h] = size(rows);
   return <span className={"px " + (className || "")} style={{ width: w * s, height: h * s }}><i style={{ left: -s, top: -s, width: s, height: s, boxShadow: shadow(rows, s) }} /></span>;
 }
-function Bubbles() {
-  const n = S.cute.bubbles | 0;
-  if (!n) return null;
-  return (
-    <span className="bb-bubbles">
-      {Array.from({ length: n }, (_, i) => (
-        <i key={i} style={{ "--x": `${6 + (i * 37) % 86}%`, "--s": `${5 + (i * 3) % 9}px`,
-          "--t": `${12 + (i * 5) % 9}s`, "--dl": `${-((i * 3.7) % 14)}s` }} />
-      ))}
-    </span>
-  );
-}
 
-function enterProj(e) {   // the row: just the sound. The card opens from the steps pill (enterPill)
+function enterProj(e) {   // a pop right away; the step card if you rest on the row
   if (memory.dragging) return;
-  const i = Number(e.currentTarget.dataset.i || 0);
+  const row = e.currentTarget, i = Number(row.dataset.i || 0);
   play(S.cute.hoverSound, S.cute.hoverVolume, S.cute.hoverPitch ? (0.85 + (i % 6) * 0.13).toFixed(2) : 0);
+  clearTimeout(memory.flyOpenT); keepFly();
+  memory.flyOpenT = setTimeout(() => { if (!memory.dragging) showFly(row); }, 320);
 }
-function enterPill(e) {
-  if (memory.dragging) return;
-  keepFly();
-  showFly(e.currentTarget.closest(".bb-proj"));
-}
+function leaveProj() { clearTimeout(memory.flyOpenT); scheduleHide(); }
 
 function Project({ data, now, lastPush, index }) {
   const cfg = { id: data.id, name: S.names[data.id] || data.name, path: data.path };
@@ -988,7 +985,7 @@ function Project({ data, now, lastPush, index }) {
   const pct = Math.round(frac * 100);
   const full = ok && data.done >= data.total;
   const asleep = ok && data.done === 0;
-  const hot = S.pulse === "activity" && data && data.commitsToday > 0;
+  const hot = data && data.commitsToday > 0;
   const warm = !hot && data && data.commitAt && now - data.commitAt < S.activeHours * 3600;
 
   if (ok) {
@@ -1001,42 +998,24 @@ function Project({ data, now, lastPush, index }) {
   }
   const burst = memory.doneAt[cfg.id] && now - memory.doneAt[cfg.id] < 5 ? ["done", memory.doneAt[cfg.id]]
               : memory.bumpAt[cfg.id] && now - memory.bumpAt[cfg.id] < 5 ? ["step", memory.bumpAt[cfg.id]] : null;
-  const bumped = memory.bumpAt[cfg.id] && now - memory.bumpAt[cfg.id] < 60;
   const pushed = lastPush && lastPush.repo === cfg.id && now - lastPush.at < 90;
-
   const arrived = memory.arrivedAt[cfg.id] && now - memory.arrivedAt[cfg.id] < 120;
-  const cls = ["bb-proj", full ? "full" : "", asleep ? "asleep" : "", hot ? "hot" : warm ? "warm" : "", arrived ? "arrived" : ""].join(" ");
-  const pill = !data.ok ? "?" : !data.hasPlan ? "NO PLAN" : !ok ? "PLAN" : full ? "DONE" : asleep ? "NOT STARTED" : `${data.done} / ${data.total}`;
-  memory.stepsById[cfg.id] = { id: cfg.id, path: cfg.path, name: cfg.name, done: data.done, total: data.total, steps: data.steps || [] };
+  const cls = ["bb-proj", full ? "full" : "", asleep ? "asleep" : "", !ok ? "noplan" : "", hot ? "hot" : warm ? "warm" : "", arrived ? "arrived" : "", pushed ? "pushed" : ""].join(" ");
+  const count = !data.ok ? "?" : !data.hasPlan ? "no plan" : !ok ? "plan" : full ? "DONE" : `${data.done}/${data.total}`;
+  const last = data.commitAt ? ago(data.commitAt, now) : "";
+  memory.stepsById[cfg.id] = { id: cfg.id, path: cfg.path, name: cfg.name, done: data.done, total: data.total, steps: data.steps || [], ago: last };
   const isNew = data.isNew && data.firstCommitAt && now - data.firstCommitAt < S.newForDays * 86400;
-
-  let right = null;
-  if (pushed) right = <span className="bb-push">pushed {ago(lastPush.at, now)}</span>;
-  else if (bumped) right = <span className="bb-bump">+1 step</span>;
-  else if (S.showActivity && data && data.commitAt)
-    right = <span>{data.commitsWeek ? `${data.commitsWeek} this week · ` : ""}{ago(data.commitAt, now)}</span>;
+  const tip = [cfg.name, ok && !full && data.current ? `next: ${data.current}` : "", last ? `last commit ${last}` : ""].filter(Boolean).join("\n");
 
   return (
     <div className={cls} style={{ "--w": `${pct}%`, "--f": Math.max(frac, 0.02), "--i": index, "--tint": tintOf(cfg.id) }}
-         onClick={() => { if (Date.now() - memory.dragEndAt > 300 && S.clickOpens && cfg.path) guarded(() => openPath(cfg.path), cfg.name); }} onMouseEnter={enterProj} onMouseLeave={scheduleHide} data-i={index} data-id={cfg.id} title={cfg.path ? `open ${cfg.path}` : ""}>
-      <div className="bb-row">
-        <span className="bb-dot" />
-        <span className="bb-icon" onMouseDown={dragIcon} onClick={(e) => e.stopPropagation()} title="drag me up and down the list"><Px rows={iconOf(cfg.id)} s={1.5} /></span>
-        <span className="bb-name">{cfg.name}</span>
-        {isNew ? <span className="bb-new">NEW</span> : null}
-        <span className="bb-pill" onMouseEnter={enterPill}>{pill}</span>
-      </div>
-      <div className="bb-bar"><i /></div>
-      {S.showNext || S.showActivity || S.showSparkline ? (
-        <div className="bb-sub">
-          <span className="l">{S.showNext && ok
-            ? (full ? "all steps done" : data.current ? <span><b>NEXT</b>{data.current}</span> : "")
-            : data && data.error ? <span className="bb-err">can't read plan</span>
-            : data && !data.hasPlan ? <span className="bb-err">no PLAN.md yet</span> : ""}</span>
-          <span className="r">{S.showSparkline && data ? <Spark days={data.days} /> : null}{right}</span>
-        </div>
-      ) : null}
-      <Steps steps={data && data.steps} />
+         onClick={() => { if (Date.now() - memory.dragEndAt > 300 && S.clickOpens && cfg.path) guarded(() => openPath(cfg.path), cfg.name); }}
+         onMouseEnter={enterProj} onMouseLeave={leaveProj} data-i={index} data-id={cfg.id} title={tip}>
+      <span className="bb-dot" />
+      <span className="bb-icon" onMouseDown={dragIcon} onClick={(e) => e.stopPropagation()} title="drag me up and down the list"><Px rows={iconOf(cfg.id)} s={1.2} /></span>
+      <span className="bb-name"><span>{cfg.name}</span>{isNew ? <em className="bb-new">NEW</em> : null}</span>
+      <span className="bb-bar"><i /></span>
+      <span className="bb-count">{pushed ? "pushed" : count}</span>
       {burst ? <Burst kind={burst[0]} at={burst[1]} /> : null}
     </div>
   );
@@ -1055,12 +1034,83 @@ function lockIn(e) {
   guarded(() => { play(S.cute.lockInSound); openPath(pick.path, S.lockInPrompt || ""); }, `lock in: ${name}`);
 }
 function Title() {
-  if (!S.title) return null;
-  const w = S.titleGradientWord;
-  const inner = w && S.title.includes(w)
-    ? (() => { const [a, b] = S.title.split(w); return <span>{a}<span className="g">{w}</span>{b}</span>; })()
-    : S.title;
-  return <span className="bb-title" onClick={openBoard} title={S.boardUrl ? "open the board" : ""}>{inner}</span>;
+  return <span className="bb-title" onClick={openBoard} title={S.boardUrl ? "open the board" : ""}>{S.title}</span>;
+}
+
+// ── The crew: a buddy list ──────────────────────────────────────────────────
+const GROUPS_KEY = "build-board.groups";
+function groupsOpen() {
+  if (!memory.groups) { try { memory.groups = JSON.parse(localStorage.getItem(GROUPS_KEY)) || {}; } catch (e) { memory.groups = {}; } }
+  return memory.groups;
+}
+function toggleGroup(e, key) {
+  e.stopPropagation();
+  const G = groupsOpen(); G[key] = G[key] === false;
+  try { localStorage.setItem(GROUPS_KEY, JSON.stringify(G)); } catch (err) {}
+  play(S.cute.clickSound, 0.5); redraw();
+}
+function crewSorted(crew) {
+  const rank = (id) => { const i = S.crewOrder.indexOf(id); return i < 0 ? 999 : i; };
+  return (crew || []).slice().sort((a, b) => rank(a.id) - rank(b.id) || a.name.localeCompare(b.name));
+}
+function placeTip(e) {   // the card opens toward the middle of the window, so it never hangs off the edge
+  const chip = e.currentTarget, win = chip.closest(".bb-win");
+  if (!win) return;
+  const c = chip.getBoundingClientRect(), w = win.getBoundingClientRect();
+  chip.classList.toggle("r", c.left + c.width / 2 > w.left + w.width / 2);
+}
+function Buddy({ p }) {
+  return (
+    <span className="bb-chip" onMouseEnter={placeTip}>
+      <LilGuy who={p.id} pose="idle" size={22} play />
+      <b>{p.name}</b>
+      <span className="bb-tip">
+        <span className="who"><b>{p.name}</b> · {p.role}</span>
+        <span className="sub">away · ask them to</span>
+        {p.examples.map((x, i) => <span key={i} className="ex">{x}</span>)}
+      </span>
+    </span>
+  );
+}
+function Footer() {
+  return (
+    <footer className="bb-foot">
+        {S.cute.sounds ? (
+          <span className={"bb-mute lv" + level()} onClick={toggleSound} title={levelTitle()}>
+            <Px rows={SPK_OFF} s={1.6} className="lv0" /><Px rows={SPK_1} s={1.6} className="lv1" /><Px rows={SPK_ON} s={1.6} className="lv2" /><Px rows={SPK_3} s={1.6} className="lv3" />
+          </span>
+        ) : null}
+        <span className="bb-refresh" onClick={(e) => { e.stopPropagation(); refreshWidget(); }} onMouseDown={(e) => e.stopPropagation()} title="reload the widget">↻</span>
+        <span className="sp" />
+        <span className="bb-btn" onClick={(e) => { e.stopPropagation(); lockNow(e.shiftKey); }} onDoubleClick={(e) => { e.stopPropagation(); lockNow(true); }} onMouseDown={(e) => e.stopPropagation()}
+              title="lock · shift-click or double-click: lock for company"><Px rows={LOCK_PX} s={1.2} />LOCK</span>
+        <span className="bb-btn" onClick={(e) => { e.stopPropagation(); helpChat(); }} onMouseDown={(e) => e.stopPropagation()}
+              title="a Claude Code chat in the widget's own folder: bugs, ideas, tweaks">HELP</span>
+    </footer>
+  );
+}
+function Crew({ crew }) {
+  if (!S.crewTitle || !crew || !crew.length) return null;
+  const G = groupsOpen(), people = crewSorted(crew);
+  const working = [], away = people;   // live status comes in with the hook; for now everyone's away
+  const head = (key, label, n) => (
+    <div className={"bb-grp" + (G[key] === false ? " shut" : "")} onClick={(e) => toggleGroup(e, key)}><i />{label} <span>({n})</span></div>
+  );
+  return (
+    <section className="bb-win bb-crew">
+      <header className="bb-tb" onMouseDown={startDrag}>
+        <LilGuy who="base" pose="idle" size={18} />
+        <span className="bb-title">{S.crewTitle}</span>
+        <span className="sp" />
+        <span className="bb-online">{working.length}/{people.length} online</span>
+        <ThemeSwitch />
+      </header>
+      {head("office", "In the Office", working.length)}
+      {G.office === false ? null : <div className="bb-empty">nobody's on the clock</div>}
+      {head("away", "Away", away.length)}
+      {G.away === false ? null : <div className="bb-chips">{away.map((p) => <Buddy key={p.id} p={p} />)}</div>}
+    </section>
+  );
 }
 
 function renderBoard({ output, error }) {
@@ -1095,46 +1145,52 @@ function renderBoard({ output, error }) {
   memory.boardRepos = repos;   // for LOCK IN
   const party = S.cute.pushParty && memory.partyAt && Date.now() - memory.partyAt < 4000;   // just pushed: the whole panel celebrates
 
+  const theme = themeNow();
+
   return (
-    <div className={"bb" + (party ? " bb-party" : "") + " bb-fixed"} ref={mountPos} onMouseMove={touch} onWheel={wheelScale}>
+    <div className={"bb" + (party ? " bb-party" : "") + " bb-fixed"} data-theme={theme} ref={mountPos} onMouseMove={touch} onWheel={wheelScale}>
       {party ? <Confetti key={memory.partyAt} /> : null}
-      <style>{styles(today > 0)}</style>
-      <Bubbles />
-      <div className="bb-grab" onMouseDown={startDrag} title={S.draggable ? "drag to move" : ""}>
-        {S.eyebrow ? <div className="bb-eyebrow">{S.eyebrow}</div> : null}
-        <div className="bb-head">
+      <style>{styles()}</style>
+      <Crew crew={data && data.crew} />
+      <section className="bb-win bb-board">
+        <header className="bb-tb" onMouseDown={startDrag} title={S.draggable ? "drag to move" : ""}>
+          <LilGuy who="base" pose="icon" size={18} className="hov" />
           <Title />
-          {S.clickOpens ? <span className="bb-lockin" onClick={lockIn} onMouseDown={(e) => e.stopPropagation()} title="a random project from the board opens in Claude Code, /step already typed">LOCK IN</span> : null}
           {memory.screens && memory.screens.length > 1 && S.screen !== "all"
             ? <span className="bb-swap" onClick={swapScreen} onMouseDown={(e) => e.stopPropagation()} title="send to the other display">⇄</span> : null}
-          <span className="bb-stamp">{data ? ago(data.generatedAt, now) : "…"}</span>
-        </div>
+          <span className="sp" />
+          {S.crewTitle ? null : <ThemeSwitch />}
+          {S.clickOpens ? <span className="bb-lockin" onClick={lockIn} onMouseDown={(e) => e.stopPropagation()} title="a random project from the board opens in Claude Code, /step already typed">LOCK IN</span> : null}
+        </header>
         {S.showToday && data ? (
           <div className="bb-today">
-            {today ? <span><b>{today} commit{today === 1 ? "" : "s"} today</b> · {data.activeToday} project{data.activeToday === 1 ? "" : "s"}</span>
-                   : <span>no commits yet today</span>}
-            {S.cute.streak && data.streak >= 2 ? <span> · 🔥 {data.streak}-day streak</span> : null}
+            <span className="l">
+              {today ? <span><b>{today} commit{today === 1 ? "" : "s"} today</b> · {data.activeToday} project{data.activeToday === 1 ? "" : "s"}</span>
+                     : <span>no commits yet today</span>}
+              {S.cute.streak && data.streak >= 2 ? <span> · {data.streak}-day streak</span> : null}
+            </span>
+            <span className="stamp">{ago(data.generatedAt, now)}</span>
           </div>
         ) : null}
-        <div className="bb-rule" />
-      </div>
-      <div className="bb-body" onScroll={hideFly}>
-        {error || parseError ? (
-          <div className="bb-err">board.py didn't answer: {String(error || parseError)}</div>
-        ) : (
-          <div>
-            <div className="bb-list">
-              {repos.map((p, i) => <Project key={p.id} data={p} now={now} lastPush={data && data.lastPush} index={i} />)}
-            </div>
-            {track ? (
-              <div className="bb-track"><b>TRACK<i>hand-kept · no repo · tick steps in the card</i></b>
-                <Project key="tools" data={track} now={now} lastPush={null} index={repos.length} />
+        <div className="bb-body" onScroll={hideFly}>
+          {error || parseError ? (
+            <div className="bb-err">board.py didn't answer: {String(error || parseError)}</div>
+          ) : (
+            <div>
+              <div className="bb-list">
+                {repos.map((p, i) => <Project key={p.id} data={p} now={now} lastPush={data && data.lastPush} index={i} />)}
               </div>
-            ) : null}
-          </div>
-        )}
-      </div>
-      {S.hoverSteps && S.stepsStyle === "flyout" ? (
+              {track ? (
+                <div className="bb-track"><b>TRACK<i>hand-kept · no repo</i></b>
+                  <Project key="tools" data={track} now={now} lastPush={null} index={repos.length} />
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+        <Footer />
+      </section>
+      {S.hoverSteps ? (
         <div className="bb-fly right" onMouseEnter={keepFly} onMouseLeave={scheduleHide} onClick={(e) => e.stopPropagation()}>
           <div className="bb-fly-card">
             <div className="bb-fly-head"><b /><span /></div>
@@ -1143,16 +1199,6 @@ function renderBoard({ output, error }) {
         </div>
       ) : null}
       <LockPad />
-      {S.cute.sounds ? (
-        <span className={"bb-mute lv" + level()} onClick={toggleSound} title={levelTitle()}>
-          <Px rows={SPK_OFF} s={2} className="lv0" /><Px rows={SPK_1} s={2} className="lv1" /><Px rows={SPK_ON} s={2} className="lv2" /><Px rows={SPK_3} s={2} className="lv3" />
-        </span>
-      ) : null}
-      <span className="bb-refresh" onClick={(e) => { e.stopPropagation(); refreshWidget(); }} onMouseDown={(e) => e.stopPropagation()} title="reload the widget">↻</span>
-      <span className="bb-lockbtn" onClick={(e) => { e.stopPropagation(); lockNow(e.shiftKey); }} onDoubleClick={(e) => { e.stopPropagation(); lockNow(true); }} onMouseDown={(e) => e.stopPropagation()}
-            title="lock · shift-click or double-click: lock for company"><Px rows={LOCK_PX} s={1.5} /><b>LOCK</b></span>
-      <span className="bb-lockbtn bb-help" onClick={(e) => { e.stopPropagation(); helpChat(); }} onMouseDown={(e) => e.stopPropagation()}
-            title="a Claude Code chat in the widget's own folder: bugs, ideas, tweaks"><b>HELP</b></span>
       <span className="bb-edge" onMouseDown={(e) => startResize(e, "w")} title="drag for width" />
       <span className="bb-edge l" onMouseDown={(e) => startResize(e, "l")} title="drag for width" />
       <span className="bb-grip l" onMouseDown={(e) => startResize(e, "lh")} onDoubleClick={resetSize} title="drag to resize · double-click to reset" />
@@ -1161,10 +1207,11 @@ function renderBoard({ output, error }) {
     </div>
   );
 }
+
 // A stateful root so the widget can redraw itself at once (a drag, a tick) instead of waiting for the next refresh.
 class Board extends React.Component {
   componentDidMount() {
-    memory.redraw = () => this.forceUpdate();
+    memory.redraw = () => this.forceUpdate(); watchMacTheme();
     if (S.lock && S.lock.reset) { try { localStorage.removeItem(PIN_KEY); localStorage.removeItem(PIN2_KEY); localStorage.removeItem(LOCK_KEY); } catch (e) {} }
     if (!memory.idleT) memory.idleT = setInterval(checkIdle, 15000);
     try { const L = localStorage.getItem(LOCK_KEY); if (L && pinStored(L === "2") && !memory.pin) lockNow(L === "2"); } catch (e) {}   // locked before the refresh, locked after

@@ -23,13 +23,13 @@ Look: Y2K Frutiger Aero glass, light in light mode and dark in dark mode (follow
 - **Out of scope:** widget code, chat
 
 ### 4. Messenger shell + roster
-- **Status:** current
-- **Scope:** restyle `index.jsx` into the messenger look: slim Build Board strip on top (progress bars kept), a buddy list panel under it, Frutiger Aero glass, a Light / Dark / Auto switch (Auto follows the Mac, the pick is remembered), the lil guy in the title bar. `board.py` reads `~/.claude/agents/*.md` frontmatter: name, role, and a new `examples` field (2-3 go-to asks, added to each agent file), falling back to the "Use when" part of the description. Everyone shows as Away/Idle for now.
+- **Status:** done
+- **Scope:** restyle `index.jsx` into the messenger look: slim Build Board strip on top (progress bars kept), a buddy list panel under it, Frutiger Aero glass, a Light / Dark / Auto switch (Auto follows the Mac, the pick is remembered), the lil guy in the title bar. `board.py` reads `~/.claude/agents/*.md` frontmatter: name, role, and a new `examples` field (2-3 go-to asks, added to each agent file), falling back to the "Use when" part of the description. Gooey: drag the widget and the windows wobble like jelly, then spring back and settle. Crew sits above Build Board. Everyone shows as Away/Idle for now.
 - **Dependencies:** 1, 3
 - **Out of scope:** live status, hooks, chat, vibe/story/catchphrase (not shown)
 
 ### 5. Live status hook
-- **Status:** not-started
+- **Status:** current
 - **Scope:** `crew-hook.py` in this repo, wired into `~/.claude/settings.json` on SubagentStart/SubagentStop. Writes `.crew.json` in the widget folder (gitignored): who, which project (from cwd), started, ended, done/failed/stuck per step 2's rules, plus a short history per agent. `server.py` gets a `crew` MCP tool ("who's working?").
 - **Dependencies:** 2
 - **Out of scope:** widget UI
