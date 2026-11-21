@@ -35,13 +35,13 @@ Look: Y2K Frutiger Aero glass, light in light mode and dark in dark mode (follow
 - **Out of scope:** widget UI
 
 ### 6. Live buddy list
-- **Status:** current
+- **Status:** done
 - **Scope:** `index.jsx` reads `.crew.json`. Working agents move up to "In the Office" with their status pose and a project tag. Idle agents sit in "Away" as small chips. A status line like "done w/ cli-tool icons · 4m ago" so the crew feels like a team that's been working with you.
 - **Dependencies:** 4, 5
 - **Out of scope:** chat, hook script
 
 ### 7. IM window
-- **Status:** not-started
+- **Status:** current
 - **Scope:** clicking a buddy opens an IM window: title bar with their name and role, project picker (defaults to their last project), last job line, their `examples` as quick-reply chips, text box + Send. Send runs that agent headless in the chosen project via a small `chat.py` (keeps one thread per agent + project, on a lighter model to protect the budget) and streams the reply into the window. Closing it doesn't kill a running reply.
 - **Dependencies:** 4
 - **Out of scope:** hook script, status logic

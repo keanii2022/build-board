@@ -766,6 +766,25 @@ function styles() {
     .bb-tip .who { font-size: 11px; color: var(--muted); }
     .bb-tip .who b { color: var(--text); font-weight: 600; }
     .bb-tip .sub { font-size: 8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin: 2px 0 1px; }
+    .bb-tip .last { font-size: 10px; color: var(--muted); }
+    .bb-office { display: grid; gap: 3px; padding: 2px 6px 4px; }
+    .bb-desk { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 3px 8px 3px 4px;
+      border-radius: 8px; background: var(--row); box-shadow: inset 0 0 0 1px var(--row-line); }
+    .bb-desk.done, .bb-desk.failed { opacity: 0.82; }
+    .bb-desk-who { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+    .bb-desk-who .top { display: flex; align-items: center; gap: 5px; min-width: 0; }
+    .bb-desk-who b { font-size: 11px; font-weight: 600; }
+    .bb-desk-who .line { font-size: 9.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bb-tag { font-size: 8.5px; font-weight: 600; padding: 0 6px; border-radius: 999px; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent); }
+    .bb-many { font-size: 9px; font-weight: 600; color: var(--muted); }
+    .bb-state { font-size: 8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+    .bb-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .bb-state.working { color: #2fbf5b; }
+    .bb-state.working::before { animation: bb-ping 2s ease-out infinite; }
+    .bb-state.stuck { color: #e8a21b; }
+    .bb-state.failed { color: #e5484d; }
+    .bb-state.done { color: var(--accent); }
     .bb-tip .ex { font-size: 10px; color: var(--text); padding-left: 9px; position: relative; }
     .bb-tip .ex::before { content: ""; position: absolute; left: 1px; top: 6px; width: 3px; height: 3px; border-radius: 50%; background: var(--accent); }
 
@@ -1059,13 +1078,55 @@ function placeTip(e) {   // the card opens toward the middle of the window, so i
   const c = chip.getBoundingClientRect(), w = win.getBoundingClientRect();
   chip.classList.toggle("r", c.left + c.width / 2 > w.left + w.width / 2);
 }
-function Buddy({ p }) {
+const OFFICE_FOR = 10 * 60;   // a finished agent stays in the office this long, showing how it went, then heads home
+function lastLine(r, now) {   // "done w/ cli-tool icons · 4m ago"
+  if (!r) return "";
+  const word = r.reason === "stopped" ? "stopped" : r.status === "failed" ? "failed" : "done";
+  return `${word} w/ ${r.task || r.project} · ${ago(r.ended, now)}`;
+}
+function liveLine(L, now) {
+  const r = L.runs[L.runs.length - 1];
+  if (L.status === "stuck") return `stuck on ${r.task || r.project} · quiet a while`;
+  return `${r.task || "on " + r.project} · ${since(r.started, now)}`;
+}
+function since(ts, now) {
+  const m = Math.max(0, Math.floor((now - ts) / 60));
+  return m < 1 ? "just started" : m < 60 ? `${m}m in` : `${Math.floor(m / 60)}h ${m % 60}m in`;
+}
+function inOffice(p, now) {
+  const L = p.live;
+  if (!L) return false;
+  if (L.runs.length) return true;
+  return !!(L.last && now - L.last.ended < OFFICE_FOR);
+}
+function OfficeRow({ p, now }) {
+  const L = p.live, live = L.runs.length > 0;
+  const status = live ? L.status : L.last.status;
+  const projects = live ? [...new Set(L.runs.map((r) => r.project).reverse())] : [L.last.project];   // newest job first, matching the line under it
+  const line = live ? liveLine(L, now) : lastLine(L.last, now);
+  return (
+    <div className={"bb-desk " + status} onMouseEnter={placeTip}>
+      <LilGuy who={p.id} pose={status} size={30} play />
+      <span className="bb-desk-who">
+        <span className="top"><b>{p.name}</b>
+          <span className="bb-tag">{projects[0]}{projects.length > 1 ? ` +${projects.length - 1}` : ""}</span>
+          {L.runs.length > 1 ? <span className="bb-many">×{L.runs.length}</span> : null}
+        </span>
+        <span className="line">{line}</span>
+      </span>
+      <span className={"bb-state " + status}>{status === "failed" && L.last && L.last.reason === "stopped" && !live ? "stopped" : status}</span>
+    </div>
+  );
+}
+function Buddy({ p, now }) {
+  const last = p.live && p.live.last;
   return (
     <span className="bb-chip" onMouseEnter={placeTip}>
       <LilGuy who={p.id} pose="idle" size={22} play />
       <b>{p.name}</b>
       <span className="bb-tip">
         <span className="who"><b>{p.name}</b> · {p.role}</span>
+        {last ? <span className="last">{lastLine(last, now)}</span> : null}
         <span className="sub">away · ask them to</span>
         {p.examples.map((x, i) => <span key={i} className="ex">{x}</span>)}
       </span>
@@ -1089,10 +1150,14 @@ function Footer() {
     </footer>
   );
 }
-function Crew({ crew }) {
+const DESK_RANK = { working: 0, stuck: 1, failed: 2, done: 3 };
+function Crew({ crew, now }) {
   if (!S.crewTitle || !crew || !crew.length) return null;
   const G = groupsOpen(), people = crewSorted(crew);
-  const working = [], away = people;   // live status comes in with the hook; for now everyone's away
+  const office = people.filter((p) => inOffice(p, now)), away = people.filter((p) => !inOffice(p, now));
+  const deskStatus = (p) => p.live.runs.length ? p.live.status : p.live.last.status;
+  office.sort((a, b) => DESK_RANK[deskStatus(a)] - DESK_RANK[deskStatus(b)]);
+  const working = office.filter((p) => p.live.runs.length);
   const head = (key, label, n) => (
     <div className={"bb-grp" + (G[key] === false ? " shut" : "")} onClick={(e) => toggleGroup(e, key)}><i />{label} <span>({n})</span></div>
   );
@@ -1105,10 +1170,12 @@ function Crew({ crew }) {
         <span className="bb-online">{working.length}/{people.length} online</span>
         <ThemeSwitch />
       </header>
-      {head("office", "In the Office", working.length)}
-      {G.office === false ? null : <div className="bb-empty">nobody's on the clock</div>}
+      {head("office", "In the Office", office.length)}
+      {G.office === false ? null : office.length
+        ? <div className="bb-office">{office.map((p) => <OfficeRow key={p.id} p={p} now={now} />)}</div>
+        : <div className="bb-empty">nobody's on the clock</div>}
       {head("away", "Away", away.length)}
-      {G.away === false ? null : <div className="bb-chips">{away.map((p) => <Buddy key={p.id} p={p} />)}</div>}
+      {G.away === false ? null : <div className="bb-chips">{away.map((p) => <Buddy key={p.id} p={p} now={now} />)}</div>}
     </section>
   );
 }
@@ -1151,7 +1218,7 @@ function renderBoard({ output, error }) {
     <div className={"bb" + (party ? " bb-party" : "") + " bb-fixed"} data-theme={theme} ref={mountPos} onMouseMove={touch} onWheel={wheelScale}>
       {party ? <Confetti key={memory.partyAt} /> : null}
       <style>{styles()}</style>
-      <Crew crew={data && data.crew} />
+      <Crew crew={data && data.crew} now={now} />
       <section className="bb-win bb-board">
         <header className="bb-tb" onMouseDown={startDrag} title={S.draggable ? "drag to move" : ""}>
           <LilGuy who="base" pose="icon" size={18} className="hov" />

@@ -237,13 +237,32 @@ def crew():
     return people
 
 
+def crew_live(people):
+    """Each person's live status from .crew.json (crew-hook.py keeps it; loading it also sweeps up stopped agents)."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("crew_hook", os.path.join(HERE, "crew-hook.py"))
+        ch = importlib.util.module_from_spec(spec); spec.loader.exec_module(ch)
+        roster = ch.roster()
+    except Exception:
+        return people
+    keep = ("project", "task", "started", "ended", "status", "reason")
+    for p in people:
+        a = roster.get(p["id"])
+        if not a: continue
+        runs = sorted(a["runs"], key=lambda r: r["started"])
+        p["live"] = {"status": a["status"], "runs": [{k: r.get(k) for k in keep} for r in runs],
+                     "last": {k: a["last"].get(k) for k in keep} if a.get("last") else None}
+    return people
+
+
 def main():
     projects = scan() + [t for t in [tools_track()] if t]
     projects.sort(key=lambda p: p.get("activityAt", 0), reverse=True)
     result = {"generatedAt": int(time.time()), "projects": projects}
     result["screens"] = screens()
     result["dir"] = os.path.basename(HERE)   # the widget's folder name, which is also its URL path on Übersicht's server
-    result["crew"] = crew()
+    result["crew"] = crew_live(crew())
     result["today"] = sum(p.get("commitsToday", 0) for p in projects)
     result["activeToday"] = sum(1 for p in projects if p.get("commitsToday"))
     result["streak"] = streak(set().union(*[set(p.pop("dates", [])) for p in projects]))

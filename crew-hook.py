@@ -128,6 +128,7 @@ def on_start(p):
 
 def on_stop(p):
     agent_id = p.get("agent_id")
+    if not is_crew(p.get("agent_type", "")): return
     with Locked() as data:
         run = data["open"].get(agent_id)
         if run:
