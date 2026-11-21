@@ -17,14 +17,14 @@ Look: Y2K Frutiger Aero glass, light in light mode and dark in dark mode (follow
 - **Out of scope:** widget code, the real status script (step 5)
 
 ### 3. The lil guy (Blender)
-- **Status:** current
-- **Scope:** an original glossy Y2K mascot built by a Blender script kept in the repo (`art/lilguy.py`, run headless), so he can be re-rendered any time. Renders to `art/` as transparent @2x PNGs: the main icon, plus a pose for each status: idle (asleep), working (heads-down typing), done (small win), failed (laptop smoking), stuck (scratching his head). One per-agent accent color so buddies tell apart at a glance. He has to read well tiny (16-24px) on both light and dark glass.
+- **Status:** done
+- **Scope:** an original glossy Y2K mascot built by a Blender script kept in the repo (`art/lilguy.py`, run headless), so he can be re-rendered any time. Renders to `art/` as transparent @2x PNGs: the main icon, plus a pose for each status: idle (asleep), working (typing on a laptop), done (small win), failed (laptop smoking), stuck (scratching his head). Every pose is an 8-frame animation loop (a sprite strip) plus a still frame. One per-agent accent color so buddies tell apart at a glance. `art/preview.html` shows them all on light and dark glass. He has to read well tiny (16-24px) on both light and dark glass.
 - **Dependencies:** none
 - **Out of scope:** widget code, chat
 
 ### 4. Messenger shell + roster
-- **Status:** not-started
-- **Scope:** restyle `index.jsx` into the messenger look: slim Build Board strip on top (progress bars kept), a buddy list panel under it, Frutiger Aero glass, auto light/dark, the lil guy in the title bar. `board.py` reads `~/.claude/agents/*.md` frontmatter: name, role, and a new `examples` field (2-3 go-to asks, added to each agent file), falling back to the "Use when" part of the description. Everyone shows as Away/Idle for now.
+- **Status:** current
+- **Scope:** restyle `index.jsx` into the messenger look: slim Build Board strip on top (progress bars kept), a buddy list panel under it, Frutiger Aero glass, a Light / Dark / Auto switch (Auto follows the Mac, the pick is remembered), the lil guy in the title bar. `board.py` reads `~/.claude/agents/*.md` frontmatter: name, role, and a new `examples` field (2-3 go-to asks, added to each agent file), falling back to the "Use when" part of the description. Everyone shows as Away/Idle for now.
 - **Dependencies:** 1, 3
 - **Out of scope:** live status, hooks, chat, vibe/story/catchphrase (not shown)
 

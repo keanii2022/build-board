@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lil Guy Sheet</title>
+<style>
+  :root { --bg: #dfe9f5; --glass: rgba(255,255,255,0.55); --edge: rgba(255,255,255,0.8); --text: #1b2433; --muted: #5d6b80; }
+  body.dark { --bg: #0d1118; --glass: rgba(22,26,36,0.78); --edge: rgba(255,255,255,0.08); --text: #eef2f8; --muted: #8590a3; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 16px 48px; font: 13px/1.4 -apple-system, "Helvetica Neue", sans-serif; color: var(--text);
+         background: radial-gradient(1200px 600px at 20% -10%, #8fd8ff55, transparent), radial-gradient(900px 500px at 110% 10%, #c7a8ff44, transparent), var(--bg); min-height: 100vh; }
+  header { max-width: 1100px; margin: 0 auto 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  header img { width: 48px; height: 48px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); }
+  .toggle { margin-left: auto; display: flex; gap: 6px; }
+  .toggle button { font: inherit; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--edge); background: var(--glass); color: var(--text); cursor: pointer; }
+  .toggle button.on { background: #3fc1ff; color: #fff; border-color: transparent; }
+  .panel { max-width: 1100px; margin: 0 auto 18px; padding: 16px; border-radius: 18px; background: var(--glass); border: 1px solid var(--edge);
+           backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; }
+  th { font-weight: 600; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 4px 8px 10px; text-align: center; }
+  th:first-child, td:first-child { text-align: left; }
+  td { padding: 6px 8px; text-align: center; border-top: 1px solid var(--edge); vertical-align: middle; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  .a { display: inline-block; width: var(--s); height: var(--s); background-size: calc(var(--s) * 8) var(--s); background-repeat: no-repeat;
+       animation: play var(--d, 1.2s) steps(8) infinite; vertical-align: middle; }
+  @keyframes play { from { background-position: 0 0; } to { background-position: calc(var(--s) * -8) 0; } }
+  .s24 { --s: 24px; } .s48 { --s: 48px; }
+  .buddy { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 6px; border-radius: 999px; background: var(--glass); border: 1px solid var(--edge); margin: 4px; }
+  .buddy { --s: 32px; }
+  .buddy b { font-weight: 600; } .buddy i { font-style: normal; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <span class="a" style="--s: 48px; --d: 1.2s; background-image: url(base/icon-anim-48@2x.png)"></span>
+  <div><h1>The lil guy</h1><p>Every agent, every status, at the sizes the widget uses.</p></div>
+  <div class="toggle"><button data-t="light" class="on">Light glass</button><button data-t="dark">Dark glass</button></div>
+</header>
+<div class="panel" id="buddies"></div>
+<div class="panel s24"><table id="t24"></table></div>
+<div class="panel s48"><table id="t48"></table></div>
+<script>
+  const who = ["base", "hexx", "carmina", "mello", "jig", "sora", "maya", "mars", "neo", "big-bro", "benjamin"];
+  const names = { base: "Build Board", hexx: "Hexx", carmina: "C", mello: "Mello", jig: "Jig", sora: "Sora", maya: "Maya", mars: "Mars", neo: "Neo", "big-bro": "Big Bro", benjamin: "Benjamin" };
+  const roles = { hexx: "Builder", carmina: "Tester", mello: "Reviewer", jig: "Skeptic", sora: "Designer", maya: "Researcher", mars: "Publicist", neo: "Sensei", "big-bro": "Chief of Staff", benjamin: "Accountant" };
+  const poses = ["icon", "idle", "working", "done", "failed", "stuck"];
+  const demo = { hexx: "working", jig: "stuck", sora: "done", mello: "failed" };
+  const speed = { icon: "1.2s", idle: "2.4s", working: "0.7s", done: "1s", failed: "1.4s", stuck: "1.4s" };   // one loop
+  const anim = (w, p, pt) => `<span class="a" role="img" aria-label="${w} ${p}" style="--d:${speed[p]};background-image:url(${w}/${p}-anim-${pt}@2x.png)"></span>`;
+  for (const pt of [24, 48]) {
+    const t = document.getElementById("t" + pt);
+    t.innerHTML = `<tr><th>${pt}pt</th>${poses.map((p) => `<th>${p}</th>`).join("")}</tr>` +
+      who.map((w) => `<tr><td>${names[w]}</td>${poses.map((p) => `<td>${anim(w, p, pt)}</td>`).join("")}</tr>`).join("");
+  }
+  document.getElementById("buddies").innerHTML = who.slice(1).map((w) =>
+    `<span class="buddy">${anim(w, demo[w] || "idle", 32)}<b>${names[w]}</b><i>${roles[w]}</i></span>`).join("");
+  document.querySelectorAll(".toggle button").forEach((b) => b.onclick = () => {
+    document.body.classList.toggle("dark", b.dataset.t === "dark");
+    document.querySelectorAll(".toggle button").forEach((x) => x.classList.toggle("on", x === b));
+  });
+</script>
+</body>
+</html>
