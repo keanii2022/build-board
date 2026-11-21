@@ -11,13 +11,13 @@ Look: Y2K Frutiger Aero glass, light in light mode and dark in dark mode (follow
 - **Out of scope:** any crew UI, hooks, art, README/screenshot refresh (step 8)
 
 ### 2. Hook test
-- **Status:** current
+- **Status:** done
 - **Scope:** temporary SubagentStart/SubagentStop hooks in `~/.claude/settings.json` that just log the raw payloads to a scratch file. Run a couple of real subagents (one that finishes, one that gets stopped) and see what comes through: agent name, cwd, any success/error signal. Write the done/failed/stuck rules into a new project `CLAUDE.md`. Remove the temporary hooks.
 - **Dependencies:** none
 - **Out of scope:** widget code, the real status script (step 5)
 
 ### 3. The lil guy (Blender)
-- **Status:** not-started
+- **Status:** current
 - **Scope:** an original glossy Y2K mascot built by a Blender script kept in the repo (`art/lilguy.py`, run headless), so he can be re-rendered any time. Renders to `art/` as transparent @2x PNGs: the main icon, plus a pose for each status: idle (asleep), working (heads-down typing), done (small win), failed (laptop smoking), stuck (scratching his head). One per-agent accent color so buddies tell apart at a glance. He has to read well tiny (16-24px) on both light and dark glass.
 - **Dependencies:** none
 - **Out of scope:** widget code, chat
