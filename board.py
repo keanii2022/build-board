@@ -5,8 +5,8 @@ Finds every project under SCAN_DIRS on its own, reads each one's PLAN.md,
 and prints one JSON object sorted by most recent activity (newest first).
 The widget (index.jsx) runs this every few seconds.
 
-Every folder under SCAN_DIRS is a project. The widget decides what's on the
-board and what sits in the chest; a new folder lands in the chest.
+Every folder under SCAN_DIRS is a project. The widget decides which ones
+show: your saved order, plus anything active (a plan or a recent commit).
 
 Try it by hand:   python3 board.py
 """
@@ -27,7 +27,6 @@ FRESH_DAYS = 7                        # a repo with no plan still shows if it ha
 PLAN_FILES = [f for f in os.environ.get("BOARD_PLANS", "").split(",") if f] or ["PLAN.md", "docs/PLAN.md", "notes/PLAN.md", "NOTES.md"]   # first one that has steps wins
 TOOLS_JSON = os.path.join(HERE, "tools.json")   # the hand-kept track with no repo
 PUSH_MARKER = os.path.join(HERE, ".last-push")  # a pre-push git hook writes the repo name here
-PET_FILE = os.path.join(HERE, ".pet.json")      # the pet's memory, written by the widget
 
 
 def read(path):
@@ -86,42 +85,6 @@ def git(repo, *args):
         return ""
 
 
-CODE_EXT = {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".swift", ".go", ".rs", ".java", ".kt", ".rb", ".php",
-            ".c", ".cc", ".cpp", ".h", ".m", ".mm", ".cs", ".sh", ".zsh", ".sql", ".html", ".css", ".scss", ".vue",
-            ".svelte", ".lua", ".dart", ".applescript", ".ex", ".exs", ".zig", ".nim"}
-SKIP_DIRS = ("node_modules/", ".claude/", "docs/", "notes/", "vendor/", "dist/", "build/", ".next/")
-
-
-def is_code(path):
-    """A source file: how the pet tells shipped code from plans, notes and CLAUDE.md edits."""
-    if any(part in path for part in SKIP_DIRS):
-        return False
-    return os.path.splitext(path)[1].lower() in CODE_EXT
-
-
-def has_code(repo):
-    files = git(repo, "ls-files").split("\n") if os.path.isdir(os.path.join(repo, ".git")) else []
-    if not files or files == [""]:
-        files = []
-        for root, dirs, names in os.walk(repo):
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "node_modules"]
-            files += [os.path.relpath(os.path.join(root, n), repo) for n in names]
-            if len(files) > 2000:
-                break
-    return any(is_code(f) for f in files)
-
-
-def code_commits_today(repo):
-    """Commits since midnight that touch at least one source file."""
-    out = git(repo, "log", "--since=midnight", "--format=%x00%H", "--name-only")
-    n = 0
-    for block in out.split("\x00")[1:]:
-        lines = block.strip().split("\n")[1:]
-        if any(is_code(f) for f in lines if f):
-            n += 1
-    return n
-
-
 def git_info(repo):
     if not os.path.isdir(os.path.join(repo, ".git")):
         return {}
@@ -136,7 +99,7 @@ def git_info(repo):
     first = int(first[0]) if first else int(ts)
     dates = set(git(repo, "log", "--since=120.days", "--format=%cd", "--date=short").split())
     return {"isRepo": True, "commitAt": int(ts), "commitMsg": msg, "firstCommitAt": first,
-            "commitsWeek": sum(days[-7:]), "commitsToday": days[-1], "codeCommitsToday": code_commits_today(repo),
+            "commitsWeek": sum(days[-7:]), "commitsToday": days[-1],
             "days": days, "dates": sorted(dates)}
 
 
@@ -170,7 +133,7 @@ def scan():
                 if got:
                     break
             info = git_info(path)
-            entry = {"id": name, "name": name, "path": path, "ok": True, "hasPlan": bool(plan), "code": has_code(path)}
+            entry = {"id": name, "name": name, "path": path, "ok": True, "hasPlan": bool(plan)}
             entry.update(summarize(steps))
             entry.update(info)
             st = os.stat(path)
@@ -241,7 +204,6 @@ def main():
     result = {"generatedAt": int(time.time()), "projects": projects}
     result["screens"] = screens()
     result["today"] = sum(p.get("commitsToday", 0) for p in projects)
-    result["todayCode"] = sum(p.get("codeCommitsToday", 0) for p in projects if p.get("code"))   # what the pet gets paid for
     result["activeToday"] = sum(1 for p in projects if p.get("commitsToday"))
     result["streak"] = streak(set().union(*[set(p.pop("dates", [])) for p in projects]))
     try:
@@ -249,10 +211,6 @@ def main():
         result["lastPush"] = {"at": int(st.st_mtime), "repo": read(PUSH_MARKER).strip()}
     except OSError:
         result["lastPush"] = None
-    try:
-        result["pet"] = json.loads(read(PET_FILE))
-    except Exception:
-        result["pet"] = None
     json.dump(result, sys.stdout)
 
 
