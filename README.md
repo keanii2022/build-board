@@ -2,7 +2,7 @@
 
 **Your projects' PLAN.md files, as a live progress board on your Mac desktop. With a pixel pet that eats the steps you tick, and an MCP server so Claude Code reads the same board.**
 
-![Build Board on a desktop: one bar per project, commits and streak on top, the pet in the corner](demo.gif)
+![Build Board on a desktop: a project bar with its steps, commits and streak on top, the 3D pet beside the board, the chest at the bottom](screenshot.png)
 
 ## Why
 
